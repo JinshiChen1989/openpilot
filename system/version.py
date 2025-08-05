@@ -15,8 +15,8 @@ TESTED_BRANCHES = RELEASE_BRANCHES + ['devel', 'devel-staging', 'nightly-dev']
 
 BUILD_METADATA_FILENAME = "build.json"
 
-training_version: str = "0.2.0"
-terms_version: str = "2"
+training_version: bytes = b"0.2.0"
+terms_version: bytes = b"2"
 
 
 def get_version(path: str = BASEDIR) -> str:
@@ -26,7 +26,7 @@ def get_version(path: str = BASEDIR) -> str:
 
 
 def get_release_notes(path: str = BASEDIR) -> str:
-  with open(os.path.join(path, "RELEASES.md")) as f:
+  with open(os.path.join(path, "CHANGELOGS.md")) as f:
     return f.read().split('\n\n', 1)[0]
 
 

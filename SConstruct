@@ -17,7 +17,7 @@ AGNOS = TICI
 
 Decider('MD5-timestamp')
 
-SetOption('num_jobs', max(1, int(os.cpu_count()/2)))
+SetOption('num_jobs', int(os.cpu_count()/2))
 
 AddOption('--kaitai',
           action='store_true',
@@ -38,6 +38,10 @@ AddOption('--coverage',
 AddOption('--clazy',
           action='store_true',
           help='build with clazy')
+
+AddOption('--compile_db',
+          action='store_true',
+          help='build clang compilation database')
 
 AddOption('--ccflags',
           action='store',
@@ -76,6 +80,7 @@ assert arch in ["larch64", "aarch64", "x86_64", "Darwin"]
 
 lenv = {
   "PATH": os.environ['PATH'],
+  "LD_LIBRARY_PATH": [Dir(f"#third_party/acados/{arch}/lib").abspath],
   "PYTHONPATH": Dir("#").abspath + ':' + Dir(f"#third_party/acados").abspath,
 
   "ACADOS_SOURCE_DIR": Dir("#third_party/acados").abspath,
@@ -83,7 +88,7 @@ lenv = {
   "TERA_PATH": Dir("#").abspath + f"/third_party/acados/{arch}/t_renderer"
 }
 
-rpath = []
+rpath = lenv["LD_LIBRARY_PATH"].copy()
 
 if arch == "larch64":
   cpppath = [
@@ -125,6 +130,7 @@ else:
       f"{brew_prefix}/include",
       f"{brew_prefix}/opt/openssl@3.0/include",
     ]
+    lenv["DYLD_LIBRARY_PATH"] = lenv["LD_LIBRARY_PATH"]
   # Linux
   else:
     libpath = [
@@ -208,7 +214,8 @@ if arch == "Darwin":
   darwin_rpath_link_flags = [f"-Wl,-rpath,{path}" for path in env["RPATH"]]
   env["LINKFLAGS"] += darwin_rpath_link_flags
 
-env.CompilationDatabase('compile_commands.json')
+if GetOption('compile_db'):
+  env.CompilationDatabase('compile_commands.json')
 
 # Setup cache dir
 cache_dir = '/data/scons_cache' if AGNOS else '/tmp/scons_cache'

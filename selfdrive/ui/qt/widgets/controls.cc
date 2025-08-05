@@ -15,9 +15,13 @@ AbstractControl::AbstractControl(const QString &title, const QString &desc, cons
   icon_label = new QLabel(this);
   hlayout->addWidget(icon_label);
   if (!icon.isEmpty()) {
-    icon_pixmap = QPixmap(icon).scaledToWidth(80, Qt::SmoothTransformation);
-    icon_label->setPixmap(icon_pixmap);
-    icon_label->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+    icon_pixmap = QPixmap(icon);
+    if (!icon_pixmap.isNull()) {
+      icon_pixmap = icon_pixmap.scaledToWidth(60, Qt::SmoothTransformation);
+      icon_label->setPixmap(icon_pixmap);
+      icon_label->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+      icon_label->setMaximumWidth(60);
+    }
   }
   icon_label->setVisible(!icon.isEmpty());
 
@@ -82,7 +86,7 @@ ButtonControl::ButtonControl(const QString &title, const QString &text, const QS
       color: #33E4E4E4;
     }
   )");
-  btn.setFixedSize(250, 100);
+  btn.setFixedSize(220, 90);
   QObject::connect(&btn, &QPushButton::clicked, this, &ButtonControl::clicked);
   hlayout->addWidget(&btn);
 }

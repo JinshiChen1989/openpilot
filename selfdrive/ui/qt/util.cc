@@ -18,7 +18,6 @@
 #include <QtXml/QDomDocument>
 
 #include "common/swaglog.h"
-#include "common/util.h"
 #include "system/hardware/hw.h"
 
 QString getVersion() {
@@ -27,11 +26,12 @@ QString getVersion() {
 }
 
 QString getBrand() {
-  return QObject::tr("openpilot");
+  const bool disable_driver = getenv("DISABLE_DRIVER");
+  return QObject::tr("NagasPilot") + (disable_driver ? QString::fromStdString(" - Lite") : QString(""));
 }
 
 QString getUserAgent() {
-  return "openpilot-" + getVersion();
+  return "NagasPilot-" + getVersion();
 }
 
 std::optional<QString> getDongleId() {
@@ -58,10 +58,6 @@ QMap<QString, QString> getSupportedLanguages() {
 }
 
 QString timeAgo(const QDateTime &date) {
-  if (!util::system_time_valid()) {
-    return date.date().toString();
-  }
-
   int diff = date.secsTo(QDateTime::currentDateTimeUtc());
 
   QString s;

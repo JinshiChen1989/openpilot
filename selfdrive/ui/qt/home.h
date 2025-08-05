@@ -6,6 +6,7 @@
 #include <QStackedLayout>
 #include <QTimer>
 #include <QWidget>
+#include <QDateTime>
 
 #include "common/params.h"
 #include "selfdrive/ui/qt/offroad/driverview.h"
@@ -34,6 +35,8 @@ private:
 
   QTimer* timer;
   ElidedLabel* version;
+  QLabel* date_label;
+  QLabel* time_label;
   QStackedLayout* center_layout;
   UpdateAlert *update_widget;
   OffroadAlert* alerts_widget;

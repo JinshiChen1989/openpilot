@@ -88,6 +88,10 @@ public:
     label.setText(text);
     label.setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     hlayout->addWidget(&label);
+    if (text == "") {
+      setContentsMargins(0, 50, 0, 0); // 30px top margin, 10px bottom margin
+                                        // This will create space above and below the entire header control.
+    }
   }
   void setText(const QString &text) { label.setText(text); }
 
@@ -119,7 +123,7 @@ class ToggleControl : public AbstractControl {
 
 public:
   ToggleControl(const QString &title, const QString &desc = "", const QString &icon = "", const bool state = false, QWidget *parent = nullptr) : AbstractControl(title, desc, icon, parent) {
-    toggle.setFixedSize(150, 100);
+    toggle.setFixedSize(130, 80);
     if (state) {
       toggle.togglePosition();
     }
@@ -151,7 +155,7 @@ public:
   }
 
   void setActiveIcon(const QString &icon) {
-    active_icon_pixmap = QPixmap(icon).scaledToWidth(80, Qt::SmoothTransformation);
+    active_icon_pixmap = QPixmap(icon).scaledToWidth(60, Qt::SmoothTransformation);
   }
 
   void refresh() {
@@ -187,7 +191,7 @@ class MultiButtonControl : public AbstractControl {
   Q_OBJECT
 public:
   MultiButtonControl(const QString &title, const QString &desc, const QString &icon,
-                     const std::vector<QString> &button_texts, const int minimum_button_width = 225) : AbstractControl(title, desc, icon) {
+                     const std::vector<QString> &button_texts, const int minimum_button_width = 180) : AbstractControl(title, desc, icon) {
     const QString style = R"(
       QPushButton {
         border-radius: 50px;
@@ -248,7 +252,7 @@ class ButtonParamControl : public MultiButtonControl {
   Q_OBJECT
 public:
   ButtonParamControl(const QString &param, const QString &title, const QString &desc, const QString &icon,
-                     const std::vector<QString> &button_texts, const int minimum_button_width = 225) : MultiButtonControl(title, desc, icon,
+                     const std::vector<QString> &button_texts, const int minimum_button_width = 180) : MultiButtonControl(title, desc, icon,
                                                                                                                           button_texts, minimum_button_width) {
     key = param.toStdString();
     int value = atoi(params.get(key).c_str());
@@ -316,4 +320,179 @@ public:
   LayoutWidget(QLayout *l, QWidget *parent = nullptr) : QWidget(parent) {
     setLayout(l);
   }
+};
+
+#include <QSpinBox>
+class SpinBoxControl : public AbstractControl {
+  Q_OBJECT
+
+public:
+  SpinBoxControl(const QString &title, const QString &desc = "", const QString &icon = "", const int val = 0, QWidget *parent = nullptr) : AbstractControl(title, desc, icon, parent) {
+    spinbox.setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    spinbox.setAlignment(Qt::AlignCenter);
+    spinbox.setStyleSheet(R"(
+      QSpinBox {
+        width: 300px;
+        height: 80px;
+        padding: 0px 80px;
+        border-radius: 40px;
+        font-size: 40px;
+        background-color: #393939;
+        color: white;
+        border: 2px solid #555;
+      }
+      QSpinBox::up-button {
+        subcontrol-origin: border;
+        subcontrol-position: center right;
+        width: 80px;
+        height: 80px;
+        border-radius: 40px;
+        background-color: #4a4a4a;
+        border: none;
+      }
+      QSpinBox::up-button:pressed {
+        background-color: #666;
+      }
+      QSpinBox::up-arrow {
+        image: url(:/icons/icon_plus.png);
+        width: 60px;
+        height: 60px;
+      }
+      QSpinBox::down-button {
+        subcontrol-origin: border;
+        subcontrol-position: center left;
+        width: 80px;
+        height: 80px;
+        border-radius: 40px;
+        background-color: #4a4a4a;
+        border: none;
+      }
+      QSpinBox::down-button:pressed {
+        background-color: #666;
+      }
+      QSpinBox::down-arrow {
+        image: url(:/icons/icon_minus.png);
+        width: 60px;
+        height: 60px;
+      }
+    )");
+
+    hlayout->addWidget(&spinbox);
+    QObject::connect(&spinbox, QOverload<int>::of(&QSpinBox::valueChanged), this, &SpinBoxControl::valChanged);
+  }
+
+signals:
+  void valChanged(int val);
+
+protected:
+  QSpinBox spinbox;
+};
+
+class ParamSpinBoxControl : public SpinBoxControl {
+  Q_OBJECT
+
+public:
+  ParamSpinBoxControl(const QString &param, const QString &title, const QString &desc, const QString &icon, const int minimum = 0, const int maximum = 100, const int step = 1, const QString suffix = "", const QString minText = "", QWidget *parent = nullptr) : SpinBoxControl(title, desc, icon, 0, parent) {
+    spinbox.setRange(minimum, maximum);
+    spinbox.setSingleStep(step);
+    spinbox.setSuffix(suffix);
+    spinbox.setSpecialValueText(minText);
+
+    std::string str_val = Params().get(param.toStdString().c_str());
+    if (str_val != "") {
+      int val = std::stoi(str_val);
+      spinbox.setValue(val);
+      QObject::connect(this, &SpinBoxControl::valChanged, [=](int val) {
+        Params().put(param.toStdString(), std::to_string(val));
+      });
+    }
+  }
+};
+
+class DoubleSpinBoxControl : public AbstractControl {
+  Q_OBJECT
+
+public:
+  DoubleSpinBoxControl(const QString &title, const QString &desc = "", const QString &icon = "", const double val = 0.0, QWidget *parent = nullptr) : AbstractControl(title, desc, icon, parent) {
+    spinbox.setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    spinbox.setAlignment(Qt::AlignCenter);
+    spinbox.setStyleSheet(R"(
+      QDoubleSpinBox {
+        width: 300px;
+        height: 80px;
+        padding: 0px 80px;
+        border-radius: 40px;
+        font-size: 40px;
+        background-color: #393939;
+        color: white;
+        border: 2px solid #555;
+      }
+      QDoubleSpinBox::up-button {
+        subcontrol-origin: border;
+        subcontrol-position: center right;
+        width: 80px;
+        height: 80px;
+        border-radius: 40px;
+        background-color: #4a4a4a;
+        border: none;
+      }
+      QDoubleSpinBox::up-button:pressed {
+        background-color: #666;
+      }
+      QDoubleSpinBox::up-arrow {
+        image: url(:/icons/icon_plus.png);
+        width: 50px;
+        height: 50px;
+      }
+      QDoubleSpinBox::down-button {
+        subcontrol-origin: border;
+        subcontrol-position: center left;
+        width: 80px;
+        height: 80px;
+        border-radius: 40px;
+        background-color: #4a4a4a;
+        border: none;
+      }
+      QDoubleSpinBox::down-button:pressed {
+        background-color: #666;
+      }
+      QDoubleSpinBox::down-arrow {
+        image: url(:/icons/icon_minus.png);
+        width: 50px;
+        height: 50px;
+      }
+    )");
+
+    hlayout->addWidget(&spinbox);
+    QObject::connect(&spinbox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &DoubleSpinBoxControl::valChanged);
+  }
+
+signals:
+  void valChanged(double val);
+
+protected:
+  QDoubleSpinBox spinbox;
+};
+
+class ParamDoubleSpinBoxControl : public DoubleSpinBoxControl {
+  Q_OBJECT
+
+public:
+  ParamDoubleSpinBoxControl(const QString &param, const QString &title, const QString &desc, const QString &icon, const double minimum = 0.0, const double maximum = 100.0, const double step = 1.0, const QString suffix = "", const QString minText = "", QWidget *parent = nullptr) : DoubleSpinBoxControl(title, desc, icon, 0.0, parent) {
+    spinbox.setRange(minimum, maximum);
+    spinbox.setSingleStep(step);
+    spinbox.setSuffix(suffix);
+    spinbox.setSpecialValueText(minText);
+
+    std::string str_val = Params().get(param.toStdString().c_str());
+    if (str_val != "") {
+      double val = std::stod(str_val);
+      spinbox.setValue(val);
+
+      QObject::connect(this, &DoubleSpinBoxControl::valChanged, [=](double val) {
+        Params().put(param.toStdString(), std::to_string(val));
+      });
+    }
+  }
+  void setValue(float v) { spinbox.setValue(v); }
 };

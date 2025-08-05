@@ -2,6 +2,9 @@ import numpy as np
 from abc import abstractmethod, ABC
 
 from openpilot.common.realtime import DT_CTRL
+from openpilot.common.params import Params
+
+MIN_LATERAL_CONTROL_SPEED = 0.3  # m/s
 
 
 class LatControl(ABC):

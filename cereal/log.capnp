@@ -128,7 +128,6 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     personalityChanged @91;
     aeb @92;
     userFlag @95;
-    excessiveActuation @96;
 
     soundsUnavailableDEPRECATED @47;
   }
@@ -493,6 +492,7 @@ struct DeviceState @0xa4d8b5af2aa492eb {
   gpuTempC @27 :List(Float32);
   dspTempC @49 :Float32;
   memoryTempC @28 :Float32;
+  nvmeTempC @35 :List(Float32);
   modemTempC @36 :List(Float32);
   pmicTempC @39 :List(Float32);
   intakeTempC @46 :Float32;
@@ -568,7 +568,6 @@ struct DeviceState @0xa4d8b5af2aa492eb {
   chargingDisabledDEPRECATED @18 :Bool;
   usbOnlineDEPRECATED @12 :Bool;
   ambientTempCDEPRECATED @30 :Float32;
-  nvmeTempCDEPRECATED @35 :List(Float32);
 }
 
 struct PandaState @0xa7649e2575e4591e {
@@ -586,7 +585,7 @@ struct PandaState @0xa7649e2575e4591e {
   fanPower @28 :UInt8;
   fanStallCount @34 :UInt8;
 
-  spiErrorCount @33 :UInt16;
+  spiChecksumErrorCount @33 :UInt16;
 
   harnessStatus @21 :HarnessStatus;
   sbu1Voltage @35 :Float32;
@@ -1084,7 +1083,7 @@ struct ModelDataV2 {
   confidence @23: ConfidenceClass;
 
   # Model perceived motion
-  temporalPoseDEPRECATED @21 :Pose;
+  temporalPose @21 :Pose;
 
   # e2e lateral planner
   action @26: Action;
@@ -2282,8 +2281,10 @@ struct LiveTorqueParametersData {
   points @10 :List(List(Float32));
   version @11 :Int32;
   useParams @12 :Bool;
-  calPerc @13 :Int8;
 }
+
+# HOD monitoring integrated directly in controlsd.py (following SSD pattern)
+
 
 struct LiveDelayData {
   lateralDelay @0 :Float32;
@@ -2293,7 +2294,6 @@ struct LiveDelayData {
   lateralDelayEstimate @3 :Float32;
   lateralDelayEstimateStd @5 :Float32;
   points @4 :List(Float32);
-  calPerc @6 :Int8;
 
   enum Status {
     unestimated @0;
@@ -2471,19 +2471,13 @@ struct DebugAlert {
 struct UserFlag {
 }
 
-struct SoundPressure @0xdc24138990726023 {
+struct Microphone {
   soundPressure @0 :Float32;
 
   # uncalibrated, A-weighted
   soundPressureWeighted @3 :Float32;
   soundPressureWeightedDb @1 :Float32;
-
-  filteredSoundPressureWeightedDbDEPRECATED @2 :Float32;
-}
-
-struct AudioData {
-  data @0 :Data;
-  sampleRate @1 :UInt32;
+  filteredSoundPressureWeightedDb @2 :Float32;
 }
 
 struct Touch {
@@ -2492,6 +2486,63 @@ struct Touch {
   type @2 :UInt8;
   code @3 :Int32;
   value @4 :Int32;
+}
+
+struct YOLOv8Detections @0xa1b2c3d4e5f6789a {
+  frameId @0 :UInt32;
+  timestampSof @1 :UInt64;
+  detectionCount @2 :UInt16;
+  cameraSource @3 :Text;  # "road" or "wide"
+  
+  struct Detection {
+    bbox @0 :BBox;
+    confidence @1 :Float32;
+    classId @2 :UInt8;
+    className @3 :Text;
+    consumer @4 :Text;      # "EODS" or "SOC"
+    cameraSource @5 :Text; # "road" or "wide"
+    position3D @6 :Position3D;  # Only populated for EODS classes
+    threatLevel @7 :UInt8;      # 0-5, only for EODS classes
+    
+    struct BBox {
+      x1 @0 :Float32;
+      y1 @1 :Float32; 
+      x2 @2 :Float32;
+      y2 @3 :Float32;
+    }
+    
+    struct Position3D {
+      x @0 :Float32;  # Forward distance (meters)
+      y @1 :Float32;  # Lateral position (meters)
+      z @2 :Float32;  # Vertical position (meters, typically 0)
+    }
+  }
+  
+  detections @4 :List(Detection);
+}
+
+struct EODS @0xb1c2d3e4f5a67890 {
+  enabled @0 :Bool;           # EODS system enabled
+  active @1 :Bool;            # EODS currently taking action
+  action @2 :Text;            # Current action: EMERGENCY_STOP, HARD_BRAKE, SLOW_DOWN, MONITOR
+  speedTarget @3 :Float32;    # Target speed (m/s) for emergency response
+  reason @4 :Text;            # Human-readable reason for action
+  threatLevel @5 :UInt8;      # Current highest threat level (0-5)
+  objectDistance @6 :Float32; # Distance to closest emergency object (meters)
+  objectClass @7 :Text;       # Class of emergency object (person, horse, etc.)
+  responseTime @8 :UInt64;    # Time since detection (nanoseconds)
+}
+
+struct SOC @0xc1d2e3f4a5b67890 {
+  enabled @0 :Bool;            # SOC system enabled
+  active @1 :Bool;             # SOC currently applying offset
+  lateralOffset @2 :Float32;   # Current lateral offset (meters)
+  targetOffset @3 :Float32;    # Target lateral offset (meters)
+  reason @4 :Text;             # Human-readable reason for offset
+  vehicleCount @5 :UInt8;      # Number of large vehicles detected
+  avoidanceDistance @6 :Float32; # Distance to closest large vehicle (meters)
+  vehicleType @7 :Text;        # Type of vehicle being avoided (bus/truck)
+  offsetRate @8 :Float32;      # Rate of offset change (m/s)
 }
 
 struct Event {
@@ -2544,10 +2595,14 @@ struct Event {
     onroadEvents @134: List(OnroadEvent);
     carParams @69: Car.CarParams;
     driverMonitoringState @71: DriverMonitoringState;
+    # hodMonitoringState integrated directly in controlsd.py (following SSD pattern)
     livePose @129 :LivePose;
     modelV2 @75 :ModelDataV2;
     drivingModelData @128 :DrivingModelData;
     driverStateV2 @92 :DriverStateV2;
+    yolov8Detections @147 :YOLOv8Detections;
+    eods @148 :EODS;
+    soc @149 :SOC;
 
     # camera stuff, each camera state has a matching encode idx
     roadCameraState @2 :FrameData;
@@ -2563,8 +2618,7 @@ struct Event {
     livestreamDriverEncodeIdx @119 :EncodeIndex;
 
     # microphone data
-    soundPressure @103 :SoundPressure;
-    rawAudioData @147 :AudioData;
+    microphone @103 :Microphone;
 
     # systems stuff
     androidLog @20 :AndroidLogEntry;
@@ -2612,8 +2666,8 @@ struct Event {
     # DO change the name of the field and struct
     # DON'T change the ID (e.g. @107)
     # DON'T change which struct it points to
-    customReserved0 @107 :Custom.CustomReserved0;
-    customReserved1 @108 :Custom.CustomReserved1;
+    npControlsState @107 :Custom.NpControlsState;
+    modelExt @108 :Custom.ModelExt;
     customReserved2 @109 :Custom.CustomReserved2;
     customReserved3 @110 :Custom.CustomReserved3;
     customReserved4 @111 :Custom.CustomReserved4;

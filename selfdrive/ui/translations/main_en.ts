@@ -2,7 +2,7 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US">
 <context>
-    <name>FirehosePanel</name>
+    <name>InstallationGuidePanel</name>
     <message numerus="yes">
         <source>&lt;b&gt;%n segment(s)&lt;/b&gt; of your driving is in the training dataset so far.</source>
         <translation>
@@ -43,6 +43,25 @@
             <numerusform>%n day ago</numerusform>
             <numerusform>%n days ago</numerusform>
         </translation>
+    </message>
+</context>
+<context>
+    <name>DPPanel</name>
+    <message>
+        <source>BrownPanda Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>OEM</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>INTERRUPT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>OVERRIDE</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

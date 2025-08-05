@@ -11,6 +11,10 @@ ScrollView::ScrollView(QWidget *w, QWidget *parent) : QScrollArea(parent) {
   setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   setStyleSheet("background-color: transparent; border:none");
+  
+  // Ensure content fits horizontally
+  setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
+  setAlignment(Qt::AlignTop | Qt::AlignHCenter);
 
   QString style = R"(
     QScrollBar:vertical {
@@ -40,6 +44,11 @@ ScrollView::ScrollView(QWidget *w, QWidget *parent) : QScrollArea(parent) {
   sp.setScrollMetric(QScrollerProperties::VerticalOvershootPolicy, QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
   sp.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QVariant::fromValue<QScrollerProperties::OvershootPolicy>(QScrollerProperties::OvershootAlwaysOff));
   sp.setScrollMetric(QScrollerProperties::MousePressEventDelay, 0.01);
+  
+  // Completely disable horizontal scrolling
+  sp.setScrollMetric(QScrollerProperties::AxisLockThreshold, 0.1);
+  sp.setScrollMetric(QScrollerProperties::DragStartDistance, 0.001);
+  
   scroller->grabGesture(this->viewport(), QScroller::LeftMouseButtonGesture);
   scroller->setScrollerProperties(sp);
 }
@@ -47,3 +56,4 @@ ScrollView::ScrollView(QWidget *w, QWidget *parent) : QScrollArea(parent) {
 void ScrollView::hideEvent(QHideEvent *e) {
   verticalScrollBar()->setValue(0);
 }
+

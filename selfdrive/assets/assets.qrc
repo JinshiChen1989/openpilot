@@ -10,6 +10,8 @@
   <file>icons/lock_closed.svg</file>
   <file>icons/checkmark.svg</file>
   <file>icons/warning.png</file>
+  <file>icons/icon_plus.png</file>
+  <file>icons/icon_minus.png</file>
   <file>icons/wifi_strength_low.svg</file>
   <file>icons/wifi_strength_medium.svg</file>
   <file>icons/wifi_strength_high.svg</file>

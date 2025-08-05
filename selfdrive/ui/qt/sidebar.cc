@@ -4,6 +4,9 @@
 
 #include "selfdrive/ui/qt/util.h"
 
+#include <QrCode.hpp>
+using qrcodegen::QrCode;
+
 void Sidebar::drawMetric(QPainter &p, const QPair<QString, QString> &label, QColor c, int y) {
   const QRect rect = {30, y, 240, 126};
 
@@ -24,11 +27,10 @@ void Sidebar::drawMetric(QPainter &p, const QPair<QString, QString> &label, QCol
   p.drawText(rect.adjusted(22, 0, 0, 0), Qt::AlignCenter, label.first + "\n" + label.second);
 }
 
-Sidebar::Sidebar(QWidget *parent) : QFrame(parent), onroad(false), flag_pressed(false), settings_pressed(false), mic_indicator_pressed(false) {
-  home_img = loadPixmap("../assets/images/button_home.png", home_btn.size());
+Sidebar::Sidebar(QWidget *parent) : QFrame(parent), onroad(false), flag_pressed(false), settings_pressed(false) {
+  home_img = loadPixmap("../assets/icons/button_home.png", home_btn.size());
   flag_img = loadPixmap("../assets/images/button_flag.png", home_btn.size());
   settings_img = loadPixmap("../assets/images/button_settings.png", settings_btn.size(), Qt::IgnoreAspectRatio);
-  mic_img = loadPixmap("../assets/icons/microphone.png", QSize(30, 30));
 
   connect(this, &Sidebar::valueChanged, [=] { update(); });
 
@@ -48,15 +50,12 @@ void Sidebar::mousePressEvent(QMouseEvent *event) {
   } else if (settings_btn.contains(event->pos())) {
     settings_pressed = true;
     update();
-  } else if (recording_audio && mic_indicator_btn.contains(event->pos())) {
-    mic_indicator_pressed = true;
-    update();
   }
 }
 
 void Sidebar::mouseReleaseEvent(QMouseEvent *event) {
-  if (flag_pressed || settings_pressed || mic_indicator_pressed) {
-    flag_pressed = settings_pressed = mic_indicator_pressed = false;
+  if (flag_pressed || settings_pressed) {
+    flag_pressed = settings_pressed = false;
     update();
   }
   if (onroad && home_btn.contains(event->pos())) {
@@ -65,8 +64,6 @@ void Sidebar::mouseReleaseEvent(QMouseEvent *event) {
     pm->send("userFlag", msg);
   } else if (settings_btn.contains(event->pos())) {
     emit openSettings();
-  } else if (recording_audio && mic_indicator_btn.contains(event->pos())) {
-    emit openSettings(2, "RecordAudio");
   }
 }
 
@@ -112,8 +109,13 @@ void Sidebar::updateState(const UIState &s) {
     pandaStatus = {{tr("NO"), tr("PANDA")}, danger_color};
   }
   setProperty("pandaStatus", QVariant::fromValue(pandaStatus));
-
-  setProperty("recordingAudio", s.scene.recording_audio);
+  // rick - update every 5 secs
+  if (sm.frame % UI_FREQ*5 == 0) {
+    ip_addr = QString::fromStdString(Params().get("np_device_ip"));
+    ip_changed = ip_addr != ip_addr_prev;
+    setProperty("ipAddr", ip_addr);
+    ip_addr_prev = ip_addr;
+  }
 }
 
 void Sidebar::paintEvent(QPaintEvent *event) {
@@ -127,14 +129,19 @@ void Sidebar::paintEvent(QPaintEvent *event) {
   p.setOpacity(settings_pressed ? 0.65 : 1.0);
   p.drawPixmap(settings_btn.x(), settings_btn.y(), settings_img);
   p.setOpacity(onroad && flag_pressed ? 0.65 : 1.0);
-  p.drawPixmap(home_btn.x(), home_btn.y(), onroad ? flag_img : home_img);
-  if (recording_audio) {
-    p.setBrush(danger_color);
-    p.setOpacity(mic_indicator_pressed ? 0.65 : 1.0);
-    p.drawRoundedRect(mic_indicator_btn, mic_indicator_btn.height() / 2, mic_indicator_btn.height() / 2);
-    int icon_x = mic_indicator_btn.x() + (mic_indicator_btn.width() - mic_img.width()) / 2;
-    int icon_y = mic_indicator_btn.y() + (mic_indicator_btn.height() - mic_img.height()) / 2;
-    p.drawPixmap(icon_x, icon_y, mic_img);
+  // Load and display logo instead of QR code
+  static QPixmap logo_img;
+  if (logo_img.isNull()) {
+    logo_img = QPixmap("../assets/icons/logo.png");
+    if (!logo_img.isNull()) {
+      logo_img = logo_img.scaled(home_btn.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+  }
+
+  if (!logo_img.isNull()) {
+    p.drawPixmap(home_btn.x(), home_btn.y(), logo_img);
+  } else {
+    p.drawPixmap(home_btn.x(), home_btn.y(), onroad ? flag_img : home_img);
   }
   p.setOpacity(1.0);
 
@@ -151,6 +158,12 @@ void Sidebar::paintEvent(QPaintEvent *event) {
   p.setPen(QColor(0xff, 0xff, 0xff));
   const QRect r = QRect(58, 247, width() - 100, 50);
   p.drawText(r, Qt::AlignLeft | Qt::AlignVCenter, net_type);
+
+  // IP
+  p.setFont(InterFont(30));
+  p.setPen(QColor(0xff, 0xff, 0xff));
+  const QRect ip = QRect(40, 260, 230, 100);
+  p.drawText(ip, Qt::AlignCenter, ipAddr);
 
   // metrics
   drawMetric(p, temp_status.first, temp_status.second, 338);

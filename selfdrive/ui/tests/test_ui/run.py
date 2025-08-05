@@ -51,7 +51,7 @@ def setup_settings_software(click, pm: PubMaster):
   click(278, 720)
   time.sleep(UI_DELAY)
 
-def setup_settings_firehose(click, pm: PubMaster):
+def setup_settings_installation_guide(click, pm: PubMaster):
   click(1780, 730)
 
 def setup_settings_developer(click, pm: PubMaster):
@@ -195,7 +195,7 @@ CASES = {
   "settings_device": setup_settings_device,
   "settings_toggles": setup_settings_toggles,
   "settings_software": setup_settings_software,
-  "settings_firehose": setup_settings_firehose,
+  "settings_installation_guide": setup_settings_installation_guide,
   "settings_developer": setup_settings_developer,
   "onroad": setup_onroad,
   "onroad_disengaged": setup_onroad_disengaged,
@@ -283,9 +283,9 @@ def create_screenshots():
       driver_img = frames[2]
   else:
     with open(frames_cache, 'wb') as f:
-      road_img = FrameReader(route.camera_paths()[segnum], pix_fmt="nv12").get(0)
-      wide_road_img = FrameReader(route.ecamera_paths()[segnum], pix_fmt="nv12").get(0)
-      driver_img = FrameReader(route.dcamera_paths()[segnum], pix_fmt="nv12").get(0)
+      road_img = FrameReader(route.camera_paths()[segnum]).get(0, pix_fmt="nv12")[0]
+      wide_road_img = FrameReader(route.ecamera_paths()[segnum]).get(0, pix_fmt="nv12")[0]
+      driver_img = FrameReader(route.dcamera_paths()[segnum]).get(0, pix_fmt="nv12")[0]
       pickle.dump([road_img, wide_road_img, driver_img], f)
 
   STREAMS.append((VisionStreamType.VISION_STREAM_ROAD, cam.fcam, road_img.flatten().tobytes()))
@@ -299,9 +299,9 @@ def create_screenshots():
       params = Params()
       params.put("DongleId", "123456789012345")
       if name == 'prime':
-        params.put('PrimeType', 1)
+        params.put('PrimeType', '1')
       elif name == 'pair_device':
-        params.put('ApiCache_Device', {"is_paired":0, "prime_type":-1})
+        params.put('ApiCache_Device', '{"is_paired":0, "prime_type":-1}')
 
       t.test_ui(name, setup)
 

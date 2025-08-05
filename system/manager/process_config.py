@@ -19,7 +19,7 @@ def iscar(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and not CP.notCar
 
 def logging(started: bool, params: Params, CP: car.CarParams) -> bool:
-  run = (not CP.notCar) or not params.get_bool("DisableLogging")
+  run = not params.get_bool("DisableLogging")
   return started and run
 
 def ublox_available() -> bool:
@@ -55,6 +55,22 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
+def yolo_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  """YOLOv8 enabled if YOLOv8 parameter is active (independent of SOC)"""
+  return started and params.get_bool("np_yolo_enabled")
+
+def eods_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  """EODS enabled if both EODS parameters are active"""
+  return (started and
+          params.get_bool("np_eods_enabled") and
+          params.get_bool("np_panel_eods_enabled"))
+
+def soc_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  """SOC enabled if both SOC parameters are active"""
+  return (started and
+          params.get_bool("np_soc_enabled") and
+          params.get_bool("np_panel_soc_enabled"))
+
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
 
@@ -73,15 +89,18 @@ procs = [
   PythonProcess("webcamerad", "tools.webcam.camerad", driverview, enabled=WEBCAM),
   NativeProcess("logcatd", "system/logcatd", ["./logcatd"], only_onroad, platform.system() != "Darwin"),
   NativeProcess("proclogd", "system/proclogd", ["./proclogd"], only_onroad, platform.system() != "Darwin"),
-  PythonProcess("micd", "system.micd", iscar),
+  PythonProcess("micd", "system.micd", iscar, enabled=not os.getenv("DISABLE_DRIVER")),
   PythonProcess("timed", "system.timed", always_run, enabled=not PC),
 
   PythonProcess("modeld", "selfdrive.modeld.modeld", only_onroad),
-  PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", driverview, enabled=(WEBCAM or not PC)),
+  PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", driverview, enabled=(WEBCAM or not PC) and not os.getenv("DISABLE_DRIVER")),
+  PythonProcess("yolov8_daemon", "selfdrive.vision.yolov8_daemon", yolo_enabled),
+  PythonProcess("soc_controller", "selfdrive.controls.lib.nagaspilot.np_soc_controller", soc_enabled),  # SOC integrated into controlsd
 
   PythonProcess("sensord", "system.sensord.sensord", only_onroad, enabled=not PC),
-  NativeProcess("ui", "selfdrive/ui", ["./ui"], always_run, watchdog_max_dt=(5 if not PC else None)),
-  PythonProcess("soundd", "selfdrive.ui.soundd", only_onroad),
+  PythonProcess("ui", "selfdrive.ui.ui", always_run, watchdog_max_dt=(5 if not PC else None)),
+  PythonProcess("soundd", "selfdrive.ui.soundd", only_onroad, enabled=not os.getenv("DISABLE_DRIVER")),
+  PythonProcess("beepd", "openpilot.selfdrive.nagaspilot.ui.beepd", only_onroad, enabled=False),
   PythonProcess("locationd", "selfdrive.locationd.locationd", only_onroad),
   NativeProcess("_pandad", "selfdrive/pandad", ["./pandad"], always_run, enabled=False),
   PythonProcess("calibrationd", "selfdrive.locationd.calibrationd", only_onroad),
@@ -91,7 +110,11 @@ procs = [
   PythonProcess("selfdrived", "selfdrive.selfdrived.selfdrived", only_onroad),
   PythonProcess("card", "selfdrive.car.card", only_onroad),
   PythonProcess("deleter", "system.loggerd.deleter", always_run),
+  # Driver monitoring service - HARDCODED to always return good status (zero processing) - OpenPilot Architecture
+  # Must remain enabled even when DISABLE_DRIVER=1 to provide required driverMonitoringState messages
   PythonProcess("dmonitoringd", "selfdrive.monitoring.dmonitoringd", driverview, enabled=(WEBCAM or not PC)),
+
+  # HOD monitoring integrated directly in controlsd.py (following SSD pattern)
   PythonProcess("qcomgpsd", "system.qcomgpsd.qcomgpsd", qcomgps, enabled=TICI),
   PythonProcess("pandad", "selfdrive.pandad.pandad", always_run),
   PythonProcess("paramsd", "selfdrive.locationd.paramsd", only_onroad),
@@ -105,7 +128,11 @@ procs = [
   PythonProcess("tombstoned", "system.tombstoned", always_run, enabled=not PC),
   PythonProcess("updated", "system.updated.updated", only_offroad, enabled=not PC),
   PythonProcess("uploader", "system.loggerd.uploader", always_run),
+  PythonProcess("trip_tracker", "selfdrive.controls.lib.nagaspilot.np_trip_helper", only_onroad),
   PythonProcess("statsd", "system.statsd", always_run),
+
+  # NagasPilot processes
+  PythonProcess("mapd", "selfdrive.navigation.mapd", always_run),
 
   # debug procs
   NativeProcess("bridge", "cereal/messaging", ["./bridge"], notcar),

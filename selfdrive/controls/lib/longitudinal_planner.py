@@ -4,16 +4,21 @@ import numpy as np
 
 import cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
-from openpilot.common.constants import CV
+from openpilot.common.conversions import Conversions as CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
+from openpilot.common.params import Params
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
-from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan
+from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_speed_error, get_accel_from_plan
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.controls.lib.nagaspilot.acm import ACM
+from openpilot.selfdrive.controls.lib.nagaspilot.aem import AEM
+from openpilot.selfdrive.controls.lib.nagaspilot.dcp_profile import DCPProfile, DCPMode, DCPSafetyFallback
+from opendbc.car import structs
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
@@ -26,6 +31,7 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
+# Note: DPFlags replaced with NPFlags from nagaspilot.common.np_flags
 
 def get_max_accel(v_ego):
   return np.interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
@@ -51,8 +57,8 @@ def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
 class LongitudinalPlanner:
   def __init__(self, CP, init_v=0.0, init_a=0.0, dt=DT_MDL):
     self.CP = CP
+    self.params = Params()
     self.mpc = LongitudinalMpc(dt=dt)
-    # TODO remove mpc modes when TR released
     self.mpc.mode = 'acc'
     self.fcw = False
     self.dt = dt
@@ -61,6 +67,7 @@ class LongitudinalPlanner:
     self.a_desired = init_a
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.prev_accel_clip = [ACCEL_MIN, ACCEL_MAX]
+    self.v_model_error = 0.0
     self.output_a_target = 0.0
     self.output_should_stop = False
 
@@ -68,14 +75,40 @@ class LongitudinalPlanner:
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
     self.solverExecutionTime = 0.0
+    self.acm = ACM()
+    self.aem = AEM()
+    self.dcp = DCPProfile(self.aem)
+    self.dcp_safety = DCPSafetyFallback()
+    
+    # Initialize and register VTSC filter for proof of concept
+    try:
+      from openpilot.selfdrive.controls.lib.nagaspilot.np_vtsc_controller import NpVTSCController
+      self.vtsc_filter = NpVTSCController()
+      self.vtsc_filter.enabled = self.params.get_bool("np_vtsc_enabled", False)
+      self.dcp.register_filter_layer(self.vtsc_filter)
+      cloudlog.info(f"[LongPlanner] VTSC filter registered, enabled: {self.vtsc_filter.enabled}")
+    except Exception as e:
+      cloudlog.warning(f"[LongPlanner] Failed to initialize VTSC filter: {e}")
+      self.vtsc_filter = None
+
+    # Initialize and register MTSC filter
+    try:
+      from openpilot.selfdrive.controls.lib.nagaspilot.np_mtsc_controller import NpMTSCController
+      self.mtsc_filter = NpMTSCController()
+      self.mtsc_filter.enabled = self.params.get_bool("np_mtsc_enabled", False)
+      self.dcp.register_filter_layer(self.mtsc_filter)
+      cloudlog.info(f"[LongPlanner] MTSC filter registered, enabled: {self.mtsc_filter.enabled}")
+    except Exception as e:
+      cloudlog.warning(f"[LongPlanner] Failed to initialize MTSC filter: {e}")
+      self.mtsc_filter = None
 
   @staticmethod
-  def parse_model(model_msg):
+  def parse_model(model_msg, model_error):
     if (len(model_msg.position.x) == ModelConstants.IDX_N and
       len(model_msg.velocity.x) == ModelConstants.IDX_N and
       len(model_msg.acceleration.x) == ModelConstants.IDX_N):
-      x = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.position.x)
-      v = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.velocity.x)
+      x = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.position.x) - model_error * T_IDXS_MPC
+      v = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.velocity.x) - model_error
       a = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.acceleration.x)
       j = np.zeros(len(T_IDXS_MPC))
     else:
@@ -89,8 +122,92 @@ class LongitudinalPlanner:
       throttle_prob = 1.0
     return x, v, a, j, throttle_prob
 
-  def update(self, sm):
-    self.mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
+  def update(self, sm, np_flags=0):
+    v_ego = sm['carState'].vEgo
+
+    # --- Calculate current cycle variables needed by AEM ---
+    self.v_model_error = get_speed_error(sm['modelV2'], v_ego)
+    x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'], self.v_model_error)
+    self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
+
+    # --- AEM Logic: Determine MPC mode ---
+    if sm['selfdriveState'].experimentalMode:
+      self.mpc.mode = 'blended'
+    else:
+      current_cycle_mpc_mode = 'acc' # Default to ACC (primary mode)
+
+      # --- DCP/AEM Unified Logic ---
+      # Update DCP parameters periodically
+      self.dcp.update_parameters()
+      
+      # Initialize AEM if flag is set and not already enabled
+      if (np_flags & structs.NPFlags.AEM) and not self.aem.enabled:
+        self.aem.enabled = True
+        self.aem._current_mpc_mode = self.mpc.mode
+        cloudlog.info(f"[LongitudinalPlanner] AEM enabled. Initializing internal mode to: {self.aem._current_mpc_mode}")
+
+      # DCP Unified Mode Logic
+      if self.dcp.mode != DCPMode.OFF:
+        # DCP is active - use DCP unified mode logic
+        steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
+        
+        # Create driving context for DCP
+        driving_context = {
+          'v_ego': v_ego,
+          'lead_one': sm['radarState'].leadOne,
+          'steering_angle': steer_angle_without_offset,
+          'standstill': sm['carState'].standstill,
+          'long_personality': self.aem.personality,
+          'v_model_error': self.v_model_error,
+          'allow_throttle': self.allow_throttle,
+          'model_path_plan': {'x': x, 'v': v, 'a': a, 'j': j},
+          'a_target_prev': self.output_a_target,
+          'model_predicts_stop_prev': self.output_should_stop,
+          'fcw_active_prev': self.fcw,
+          'mpc_source_prev': self.mpc.source
+        }
+        
+        # Store driving context for filter processing later
+        self.driving_context = driving_context
+        
+        # Get mode from DCP with safety fallback
+        current_cycle_mpc_mode = self.dcp_safety.safe_get_mode(self.dcp, driving_context)
+        
+        # Handle DCP OFF mode result (returns None)
+        if current_cycle_mpc_mode is None:
+          current_cycle_mpc_mode = 'acc'  # Safe fallback to ACC
+          cloudlog.warning("[LongitudinalPlanner] DCP returned None mode, using ACC fallback")
+        
+        # Add mode change logging for debugging
+        if hasattr(self, '_prev_dcp_mode') and self._prev_dcp_mode != current_cycle_mpc_mode:
+          cloudlog.info(f"[DCP] Mode transition: {self._prev_dcp_mode} -> {current_cycle_mpc_mode}")
+        self._prev_dcp_mode = current_cycle_mpc_mode
+        
+        cloudlog.debug(f"[LongitudinalPlanner] DCP mode: {self.dcp.mode}, selected: {current_cycle_mpc_mode}")
+        
+      elif self.aem.enabled:
+        # Fallback to pure AEM for backward compatibility when DCP is OFF
+        steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
+        model_path_plan_for_aem = {'x': x, 'v': v, 'a': a, 'j': j}
+
+        current_cycle_mpc_mode = self.aem.get_mode(
+            v_ego_raw=v_ego,
+            lead_one_data_raw=sm['radarState'].leadOne,
+            steering_angle_deg_raw=steer_angle_without_offset,
+            standstill_raw=sm['carState'].standstill,
+            long_personality=self.aem.personality,
+            v_model_error_raw=self.v_model_error,
+            allow_throttle_planner=self.allow_throttle,
+            model_path_plan_raw=model_path_plan_for_aem,
+            a_target_from_prev_cycle=self.output_a_target,
+            model_predicts_stop_prev=self.output_should_stop,
+            fcw_active_prev=self.fcw,
+            mpc_source_prev=self.mpc.source
+        )
+        
+        cloudlog.debug(f"[LongitudinalPlanner] Pure AEM mode selected: {current_cycle_mpc_mode}")
+      # If neither DCP nor AEM is enabled, current_cycle_mpc_mode remains 'acc' (default)
+      self.mpc.mode = current_cycle_mpc_mode
 
     if len(sm['carControl'].orientationNED) == 3:
       accel_coast = get_coast_accel(sm['carControl'].orientationNED[1])
@@ -110,10 +227,24 @@ class LongitudinalPlanner:
     # PCM cruise speed may be updated a few cycles later, check if initialized
     reset_state = reset_state or not v_cruise_initialized
 
+    # Update ACM status
+    if not sm['selfdriveState'].experimentalMode:
+      if not self.acm.enabled and np_flags & structs.NPFlags.ACM:
+        self.acm.enabled = True
+        self.acm.downhill_only = np_flags & structs.NPFlags.ACM_DOWNHILL
+    else:
+      self.acm.enabled = False
+
+    user_control = long_control_off if self.CP.openpilotLongitudinalControl else not sm['selfdriveState'].enabled
+    self.acm.update_states(sm['carControl'], sm['radarState'], user_control, v_ego, v_cruise)
+
+    if self.acm.just_disabled:
+      reset_state = True
+
     # No change cost when user is controlling the speed, or when standstill
     prev_accel_constraint = not (reset_state or sm['carState'].standstill)
 
-    if self.mode == 'acc':
+    if self.mpc.mode == 'acc':
       accel_clip = [ACCEL_MIN, get_max_accel(v_ego)]
       steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
       accel_clip = limit_accel_in_turns(v_ego, steer_angle_without_offset, accel_clip, self.CP)
@@ -127,11 +258,18 @@ class LongitudinalPlanner:
 
     # Prevent divergence, smooth in current v_ego
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
-    x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'])
-    # Don't clip at low speeds since throttle_prob doesn't account for creep
-    self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
+    # AEM - move to top so it can access them
+    # # Compute model v_ego error
+    # self.v_model_error = get_speed_error(sm['modelV2'], v_ego)
+    # x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'], self.v_model_error)
+    # # Don't clip at low speeds since throttle_prob doesn't account for creep
+    # self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
 
-    if not self.allow_throttle:
+    # Gas gating (NoGG): Limit throttle when model predicts gas pedal lifting
+    # Can be disabled with np_lon_no_gas_gating parameter for smoother acceleration
+    np_nogg_enabled = self.params.get_bool("np_lon_no_gas_gating")
+    
+    if not self.allow_throttle and not np_nogg_enabled:
       clipped_accel_coast = max(accel_coast, accel_clip[0])
       clipped_accel_coast_interp = np.interp(v_ego, [MIN_ALLOW_THROTTLE_SPEED, MIN_ALLOW_THROTTLE_SPEED*2], [accel_clip[1], clipped_accel_coast])
       accel_clip[1] = min(accel_clip[1], clipped_accel_coast_interp)
@@ -139,13 +277,37 @@ class LongitudinalPlanner:
     if force_slow_decel:
       v_cruise = 0.0
 
-    self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
+    # Apply DCP Filter Layer Architecture if DCP is active
+    final_cruise_speed = v_cruise
+    if hasattr(self, 'dcp') and self.dcp.mode != DCPMode.OFF and hasattr(self, 'driving_context'):
+      try:
+        # Apply filter layer processing to cruise speed
+        filter_result = self.dcp_safety.safe_get_target_speed_with_filters(
+          self.dcp, v_cruise, self.driving_context)
+        
+        # Use filtered speed if valid, otherwise fallback to original
+        if filter_result.get('final_speed', 0) > 0:
+          final_cruise_speed = filter_result['final_speed']
+          
+          # Log filter activity for debugging
+          if filter_result.get('active_filters'):
+            cloudlog.debug(f"[DCP] Filters applied: {filter_result['active_filters']}, "
+                         f"Speed: {v_cruise:.1f} -> {final_cruise_speed:.1f}")
+      except Exception as e:
+        cloudlog.warning(f"[DCP] Filter processing failed: {e}, using original speed")
+        final_cruise_speed = v_cruise
+
+    self.aem.set_personality(v_ego, sm['selfdriveState'].personality)
+    self.mpc.set_weights(prev_accel_constraint, personality=self.aem.personality)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
-    self.mpc.update(sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality)
+    self.mpc.update(sm['radarState'], final_cruise_speed, x, v, a, j, personality=self.aem.personality)
 
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
     self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
+
+    # Apply ACM post-processing to the acceleration trajectory if active
+    self.a_desired_trajectory = self.acm.update_a_desired_trajectory(self.a_desired_trajectory)
 
     # TODO counter is only needed because radar is glitchy, remove once radar is gone
     self.fcw = self.mpc.crash_cnt > 2 and not sm['carState'].standstill
@@ -158,17 +320,11 @@ class LongitudinalPlanner:
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
 
     action_t =  self.CP.longitudinalActuatorDelay + DT_MDL
-    output_a_target_mpc, output_should_stop_mpc = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
+    output_a_target, self.output_should_stop = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
                                                                         action_t=action_t, vEgoStopping=self.CP.vEgoStopping)
-    output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
-    output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
-    if self.mode == 'acc':
-      output_a_target = output_a_target_mpc
-      self.output_should_stop = output_should_stop_mpc
-    else:
-      output_a_target = min(output_a_target_mpc, output_a_target_e2e)
-      self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
+    # Apply ACM to the final output acceleration target as well
+    output_a_target = self.acm.update_output_a_target(output_a_target)
 
     for idx in range(2):
       accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
@@ -178,7 +334,7 @@ class LongitudinalPlanner:
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')
 
-    plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState', 'radarState'])
+    plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState'])
 
     longitudinalPlan = plan_send.longitudinalPlan
     longitudinalPlan.modelMonoTime = sm.logMonoTime['modelV2']

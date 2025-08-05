@@ -4,20 +4,21 @@ import json
 import jwt
 from pathlib import Path
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
+UTC = timezone.utc  # Python 3.10 compatibility
 from openpilot.common.api import api_get
 from openpilot.common.params import Params
-from openpilot.common.spinner import Spinner
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.system.hardware import HARDWARE, PC
 from openpilot.system.hardware.hw import Paths
 from openpilot.common.swaglog import cloudlog
+import os
 
 
 UNREGISTERED_DONGLE_ID = "UnregisteredDevice"
 
 def is_registered_device() -> bool:
-  dongle = Params().get("DongleId")
+  dongle = Params().get("DongleId", encoding='utf-8')
   return dongle not in (None, UNREGISTERED_DONGLE_ID)
 
 
@@ -33,7 +34,7 @@ def register(show_spinner=False) -> str | None:
   """
   params = Params()
 
-  dongle_id: str | None = params.get("DongleId")
+  dongle_id: str | None = params.get("DongleId", encoding='utf8')
   if dongle_id is None and Path(Paths.persist_root()+"/comma/dongle_id").is_file():
     # not all devices will have this; added early in comma 3X production (2/28/24)
     with open(Paths.persist_root()+"/comma/dongle_id") as f:
@@ -44,7 +45,11 @@ def register(show_spinner=False) -> str | None:
     dongle_id = UNREGISTERED_DONGLE_ID
     cloudlog.warning(f"missing public key: {pubkey}")
   elif dongle_id is None:
+    if os.getenv("DISABLE_DRIVER"):
+      params.put("DongleId", UNREGISTERED_DONGLE_ID)
+      return dongle_id
     if show_spinner:
+      from openpilot.system.ui.spinner import Spinner
       spinner = Spinner()
       spinner.update("registering device")
 
@@ -74,7 +79,7 @@ def register(show_spinner=False) -> str | None:
       try:
         register_token = jwt.encode({'register': True, 'exp': datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)}, private_key, algorithm='RS256')
         cloudlog.info("getting pilotauth")
-        resp = api_get("v2/pilotauth/", method='POST', timeout=15,
+        resp = api_get("v2/pilotauth/", method='POST', timeout=5,
                        imei=imei1, imei2=imei2, serial=serial, public_key=public_key, register_token=register_token)
 
         if resp.status_code in (402, 403):
@@ -97,7 +102,8 @@ def register(show_spinner=False) -> str | None:
 
   if dongle_id:
     params.put("DongleId", dongle_id)
-    set_offroad_alert("Offroad_UnregisteredHardware", (dongle_id == UNREGISTERED_DONGLE_ID) and not PC)
+    # BrownPanda: Commented out device registration alert
+    # set_offroad_alert("Offroad_UnofficialHardware", (dongle_id == UNREGISTERED_DONGLE_ID) and not PC)
   return dongle_id
 
 

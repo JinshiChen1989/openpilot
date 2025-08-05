@@ -60,14 +60,16 @@ static void update_state(UIState *s) {
     scene.light_sensor = -1;
   }
   scene.started = sm["deviceState"].getDeviceState().getStarted() && scene.ignition;
-
-  auto params = Params();
-  scene.recording_audio = params.getBool("RecordAudio") && scene.started;
+  scene.alka_active = sm["npControlsState"].getNpControlsState().getAlkaActive();
 }
 
 void ui_update_params(UIState *s) {
   auto params = Params();
   s->scene.is_metric = params.getBool("IsMetric");
+  // Display mode feature removed - reverted to original openpilot behavior
+  s->scene.np_ui_hide_hud_speed_kph = std::atoi(params.get("np_ui_hide_hud_speed_kph").c_str());
+  s->scene.np_ui_rainbow = params.getBool("np_ui_rainbow");
+  s->scene.np_ui_radar_tracks = params.getBool("np_ui_radar_tracks");
 }
 
 void UIState::updateStatus() {
@@ -102,6 +104,8 @@ UIState::UIState(QObject *parent) : QObject(parent) {
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "driverStateV2",
     "wideRoadCameraState", "managerState", "selfdriveState", "longitudinalPlan",
+    "npControlsState",
+    "liveTracks",
   });
   prime_state = new PrimeState(this);
   language = QString::fromStdString(Params().get("LanguageSetting"));
@@ -180,6 +184,8 @@ void Device::updateBrightness(const UIState &s) {
   }
 }
 
+// Removed custom display mode logic - reverted to original openpilot behavior
+
 void Device::updateWakefulness(const UIState &s) {
   bool ignition_just_turned_off = !s.scene.ignition && ignition_on;
   ignition_on = s.scene.ignition;
@@ -190,6 +196,7 @@ void Device::updateWakefulness(const UIState &s) {
     emit interactiveTimeout();
   }
 
+  // Reverted to original openpilot behavior
   setAwake(s.scene.ignition || interactive_timeout > 0);
 }
 

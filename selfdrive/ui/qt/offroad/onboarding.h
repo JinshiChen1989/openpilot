@@ -94,7 +94,7 @@ class OnboardingWindow : public QStackedWidget {
 public:
   explicit OnboardingWindow(QWidget *parent = 0);
   inline void showTrainingGuide() { setCurrentIndex(1); }
-  inline bool completed() const { return accepted_terms && training_done; }
+  inline bool completed() const { return true; } // Always return true to skip setup dialog
 
 private:
   void updateActiveScreen();

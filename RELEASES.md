@@ -1,18 +1,10 @@
-Version 0.10.0 (2025-07-07)
-========================
-* New driving model
-  * Lead car ground-truth fixes
-  * Ported over VAE from the MLSIM stack
-  * New training architecture described in CVPR paper
-* Enable live-learned steering actuation delay
-* Opt-in audio recording for dashcam video
-
 Version 0.9.9 (2025-05-23)
 ========================
 * New driving model
   * New training architecture using parts from MLSIM
 * Steering actuation delay is now learned online
 * Ford Escape 2023-24 support thanks to incognitojam!
+* Ford Expedition 2022-24 support thanks to alan-polk!
 * Ford Kuga 2024 support thanks to incognitojam!
 * Hyundai Nexo 2021 support thanks to sunnyhaibin!
 * Tesla Model 3 and Y support thanks to lukasloetkolben!
@@ -29,7 +21,7 @@ Version 0.9.8 (2025-02-28)
   * Power draw reduced 0.5W, which means your device runs cooler
 * Added toggle to enable driver monitoring even when openpilot is not engaged
 * Localizer rewritten to remove GPS dependency at runtime
-* Firehose Mode for maximizing your training data uploads
+* Installation Guide for device setup and configuration
 * Enable openpilot longitudinal control for Ford Q3 vehicles
 * New Toyota TSS2 longitudinal tune
 * Rivian R1S and R1T support thanks to lukasloetkolben!

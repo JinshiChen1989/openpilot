@@ -1,7 +1,8 @@
 import jwt
 import os
 import requests
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
+UTC = timezone.utc  # Python 3.10 compatibility
 from openpilot.system.hardware.hw import Paths
 from openpilot.system.version import get_version
 

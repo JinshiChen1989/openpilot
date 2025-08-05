@@ -64,7 +64,49 @@ function install_ubuntu_common_requirements() {
     libqt5serialbus5-dev  \
     libqt5x11extras5-dev \
     libqt5opengl5-dev \
-    xvfb
+    xvfb \
+    pkg-config \
+    python3-pip \
+    libasound2-dev \
+    libportaudio2
+
+  # Check Python version requirement
+  PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+  echo "Current Python version: $PYTHON_VERSION"
+  
+  if [[ "$PYTHON_VERSION" < "3.11" ]]; then
+    echo "⚠️  OpenPilot/DragonPilot requires Python 3.11+ but you have $PYTHON_VERSION"
+    echo "Installing Python 3.12..."
+    
+    # Add deadsnakes PPA for newer Python versions
+    $SUDO apt-get install -y software-properties-common
+    $SUDO add-apt-repository -y ppa:deadsnakes/ppa
+    $SUDO apt-get update
+    
+    # Install Python 3.12
+    $SUDO apt-get install -y \
+      python3.12 \
+      python3.12-dev \
+      python3.12-venv
+    
+    # Install pip for Python 3.12
+    curl -sS https://bootstrap.pypa.io/get-pip.py | $SUDO python3.12
+    
+    echo "✅ Python 3.12 installed. You should use 'python3.12' instead of 'python3'"
+    echo ""
+    echo "To set Python 3.12 as default (optional):"
+    echo "  sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1"
+    echo "  sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 2"
+    echo "  sudo update-alternatives --config python3"
+  fi
+
+  # Additional packages for simulation and building Cython extensions
+  echo "Installing additional packages for simulation..."
+  $SUDO apt-get install -y --no-install-recommends \
+    python3-numpy \
+    python3-setuptools \
+    python3-wheel \
+    cython3 || echo "Some Python packages may need to be installed via pip"
 }
 
 # Install Ubuntu 24.04 LTS packages
@@ -119,6 +161,48 @@ EOF
 
     $SUDO udevadm control --reload-rules && $SUDO udevadm trigger || true
   fi
+
+  # Post-installation setup for DragonPilot/OpenPilot
+  echo "Setting up DragonPilot environment..."
+  
+  # Set up Python path for current user
+  DRAGONPILOT_ROOT="$(realpath "$(dirname "$0")/..")"
+  
+  # Add to bashrc if not already present
+  if ! grep -q "PYTHONPATH.*dragonpilot" ~/.bashrc 2>/dev/null; then
+    echo "" >> ~/.bashrc
+    echo "# DragonPilot environment (added by install_ubuntu_dependencies.sh)" >> ~/.bashrc
+    echo "export PYTHONPATH=\"$DRAGONPILOT_ROOT:\$PYTHONPATH\"" >> ~/.bashrc
+    echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.bashrc
+    
+    # Add MetaDrive to PYTHONPATH if it exists
+    if [[ -d "/home/vcar/Winsurf/metadrive" ]]; then
+      echo "export PYTHONPATH=\"/home/vcar/Winsurf/metadrive:\$PYTHONPATH\"  # MetaDrive plant model" >> ~/.bashrc
+      echo "MetaDrive path added to environment"
+    fi
+    
+    echo "Environment variables added to ~/.bashrc"
+  fi
+  
+  # Create /dev/shm/params directory with proper permissions
+  if [[ ! -d "/dev/shm/params" ]]; then
+    $SUDO mkdir -p /dev/shm/params
+    $SUDO chmod 777 /dev/shm/params
+    echo "Created /dev/shm/params directory for parameter storage"
+  fi
+  
+  echo ""
+  echo "✅ Ubuntu dependencies installed successfully!"
+  echo ""
+  echo "Next steps:"
+  echo "1. Install Python dependencies: ./tools/install_python_dependencies.sh"
+  echo "2. Build the project: scons -j\$(nproc)"
+  echo "3. Or run the complete setup: ./INSTALL_DEPENDENCIES.sh"
+  echo ""
+  echo "For simulation:"
+  echo "  cd tools/sim && ./launch_openpilot.sh"
+  echo ""
+  echo "⚠️  Start a new terminal or run 'source ~/.bashrc' to load environment variables"
 
 else
   echo "No /etc/os-release in the system. Make sure you're running on Ubuntu, or similar."

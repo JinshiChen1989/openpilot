@@ -13,8 +13,9 @@
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/widgets/prime.h"
 #include "selfdrive/ui/qt/widgets/scrollview.h"
-#include "selfdrive/ui/qt/offroad/developer_panel.h"
-#include "selfdrive/ui/qt/offroad/firehose.h"
+#include "selfdrive/ui/qt/offroad/trip_panel.h"
+#include "selfdrive/ui/qt/offroad/np_panel.h"
+#include "selfdrive/ui/qt/offroad/model_selector.h"
 
 TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   // param, title, desc, icon, restart needed
@@ -62,18 +63,25 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       true,
     },
     {
-      "RecordAudio",
-      tr("Record and Upload Microphone Audio"),
-      tr("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
-      "../assets/icons/microphone.png",
-      true,
-    },
-    {
       "IsMetric",
       tr("Use Metric System"),
       tr("Display speed in km/h instead of mph."),
       "../assets/icons/metric.png",
       false,
+    },
+    {
+      "DisableLogging",
+      tr("Disable Logging"),
+      "",
+      "../assets/offroad/icon_empty.svg",
+      true,
+    },
+    {
+      "DisableUpdates",
+      tr("Disable Updates"),
+      "",
+      "../assets/offroad/icon_empty.svg",
+      true,
     },
   };
 
@@ -88,8 +96,11 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
 
   // set up uiState update for personality setting
   QObject::connect(uiState(), &UIState::uiUpdate, this, &TogglesPanel::updateState);
-
+  const bool disable_driver = getenv("DISABLE_DRIVER");
   for (auto &[param, title, desc, icon, needs_restart] : toggle_defs) {
+    if ((param == "AlwaysOnDM" || param == "RecordFront") && disable_driver) {
+      continue;
+    }
     auto toggle = new ParamControl(param, title, desc, icon, this);
 
     bool locked = params.getBool((param + "Lock").toStdString());
@@ -135,15 +146,6 @@ void TogglesPanel::updateState(const UIState &s) {
 
 void TogglesPanel::expandToggleDescription(const QString &param) {
   toggles[param.toStdString()]->showDescription();
-}
-
-void TogglesPanel::scrollToToggle(const QString &param) {
-  if (auto it = toggles.find(param.toStdString()); it != toggles.end()) {
-    auto scroll_area = qobject_cast<QScrollArea*>(parent()->parent());
-    if (scroll_area) {
-      scroll_area->ensureWidgetVisible(it->second);
-    }
-  }
 }
 
 void TogglesPanel::showEvent(QShowEvent *event) {
@@ -208,6 +210,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   addItem(new LabelControl(tr("Dongle ID"), getDongleId().value_or(tr("N/A"))));
   addItem(new LabelControl(tr("Serial"), params.get("HardwareSerial").c_str()));
 
+  const bool disable_driver = getenv("DISABLE_DRIVER");
   pair_device = new ButtonControl(tr("Pair Device"), tr("PAIR"),
                                   tr("Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."));
   connect(pair_device, &ButtonControl::clicked, [=]() {
@@ -217,13 +220,13 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   addItem(pair_device);
 
   // offroad-only buttons
-
+  if (!disable_driver) {
   auto dcamBtn = new ButtonControl(tr("Driver Camera"), tr("PREVIEW"),
                                    tr("Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"));
   connect(dcamBtn, &ButtonControl::clicked, [=]() { emit showDriverView(); });
   addItem(dcamBtn);
-
-  resetCalibBtn = new ButtonControl(tr("Reset Calibration"), tr("RESET"), "");
+  }
+  auto resetCalibBtn = new ButtonControl(tr("Reset Calibration"), tr("RESET"), "");
   connect(resetCalibBtn, &ButtonControl::showDescriptionEvent, this, &DevicePanel::updateCalibDescription);
   connect(resetCalibBtn, &ButtonControl::clicked, [&]() {
     if (!uiState()->engaged()) {
@@ -236,7 +239,6 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
           params.remove("LiveParametersV2");
           params.remove("LiveDelay");
           params.putBool("OnroadCycleRequested", true);
-          updateCalibDescription();
         }
       }
     } else {
@@ -244,6 +246,19 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     }
   });
   addItem(resetCalibBtn);
+
+  auto translateBtn = new ButtonControl(tr("Change Language"), tr("CHANGE"), "");
+  connect(translateBtn, &ButtonControl::clicked, [=]() {
+    QMap<QString, QString> langs = getSupportedLanguages();
+    QString selection = MultiOptionDialog::getSelection(tr("Select a language"), langs.keys(), langs.key(uiState()->language), this);
+    if (!selection.isEmpty()) {
+      // put language setting, exit Qt UI, and trigger fast restart
+      params.put("LanguageSetting", langs[selection].toStdString());
+      qApp->exit(18);
+      watchdog_kick(0);
+    }
+  });
+  addItem(translateBtn);
 
   auto retrainingBtn = new ButtonControl(tr("Review Training Guide"), tr("REVIEW"), tr("Review the rules, features, and limitations of openpilot"));
   connect(retrainingBtn, &ButtonControl::clicked, [=]() {
@@ -262,29 +277,17 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     addItem(regulatoryBtn);
   }
 
-  auto translateBtn = new ButtonControl(tr("Change Language"), tr("CHANGE"), "");
-  connect(translateBtn, &ButtonControl::clicked, [=]() {
-    QMap<QString, QString> langs = getSupportedLanguages();
-    QString selection = MultiOptionDialog::getSelection(tr("Select a language"), langs.keys(), langs.key(uiState()->language), this);
-    if (!selection.isEmpty()) {
-      // put language setting, exit Qt UI, and trigger fast restart
-      params.put("LanguageSetting", langs[selection].toStdString());
-      qApp->exit(18);
-      watchdog_kick(0);
-    }
-  });
-  addItem(translateBtn);
-
   QObject::connect(uiState()->prime_state, &PrimeState::changed, [this] (PrimeState::Type type) {
-    pair_device->setVisible(type == PrimeState::PRIME_TYPE_UNPAIRED);
+    // BrownPanda: Always hide pair device button since registration is disabled
+    pair_device->setVisible(false);  // type == PrimeState::PRIME_TYPE_UNPAIRED
   });
-  QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
-    for (auto btn : findChildren<ButtonControl *>()) {
-      if (btn != pair_device && btn != resetCalibBtn) {
-        btn->setEnabled(offroad);
-      }
-    }
-  });
+  // QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
+  //   for (auto btn : findChildren<ButtonControl *>()) {
+  //     if (btn != pair_device && btn != resetCalibBtn) {
+  //       btn->setEnabled(offroad);
+  //     }
+  //   }
+  // });
 
   // power buttons
   QHBoxLayout *power_layout = new QHBoxLayout();
@@ -314,7 +317,9 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
 }
 
 void DevicePanel::updateCalibDescription() {
-  QString desc = tr("openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down.");
+  QString desc =
+      tr("openpilot requires the device to be mounted within 4° left or right and "
+         "within 5° up or 9° down. openpilot is continuously calibrating, resetting is rarely required.");
   std::string calib_bytes = params.get("CalibrationParams");
   if (!calib_bytes.empty()) {
     try {
@@ -332,48 +337,8 @@ void DevicePanel::updateCalibDescription() {
       qInfo() << "invalid CalibrationParams";
     }
   }
-
-  int lag_perc = 0;
-  std::string lag_bytes = params.get("LiveDelay");
-  if (!lag_bytes.empty()) {
-    try {
-      AlignedBuffer aligned_buf;
-      capnp::FlatArrayMessageReader cmsg(aligned_buf.align(lag_bytes.data(), lag_bytes.size()));
-      lag_perc = cmsg.getRoot<cereal::Event>().getLiveDelay().getCalPerc();
-    } catch (kj::Exception) {
-      qInfo() << "invalid LiveDelay";
-    }
-  }
-  if (lag_perc < 100) {
-    desc += tr("\n\nSteering lag calibration is %1% complete.").arg(lag_perc);
-  } else {
-    desc += tr("\n\nSteering lag calibration is complete.");
-  }
-
-  std::string torque_bytes = params.get("LiveTorqueParameters");
-  if (!torque_bytes.empty()) {
-    try {
-      AlignedBuffer aligned_buf;
-      capnp::FlatArrayMessageReader cmsg(aligned_buf.align(torque_bytes.data(), torque_bytes.size()));
-      auto torque = cmsg.getRoot<cereal::Event>().getLiveTorqueParameters();
-      // don't add for non-torque cars
-      if (torque.getUseParams()) {
-        int torque_perc = torque.getCalPerc();
-        if (torque_perc < 100) {
-          desc += tr(" Steering torque response calibration is %1% complete.").arg(torque_perc);
-        } else {
-          desc += tr(" Steering torque response calibration is complete.");
-        }
-      }
-    } catch (kj::Exception) {
-      qInfo() << "invalid LiveTorqueParameters";
-    }
-  }
-
-  desc += "\n\n";
-  desc += tr("openpilot is continuously calibrating, resetting is rarely required. "
-             "Resetting calibration will restart openpilot if the car is powered on.");
-  resetCalibBtn->setDescription(desc);
+  desc += tr(" Resetting calibration will restart openpilot if the car is powered on.");
+  qobject_cast<ButtonControl *>(sender())->setDescription(desc);
 }
 
 void DevicePanel::reboot() {
@@ -422,7 +387,6 @@ void SettingsWindow::setCurrentPanel(int index, const QString &param) {
       }
     } else {
       emit expandToggleDescription(param);
-      emit scrollToToggle(param);
     }
   }
 
@@ -463,18 +427,17 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
 
   TogglesPanel *toggles = new TogglesPanel(this);
   QObject::connect(this, &SettingsWindow::expandToggleDescription, toggles, &TogglesPanel::expandToggleDescription);
-  QObject::connect(this, &SettingsWindow::scrollToToggle, toggles, &TogglesPanel::scrollToToggle);
 
   auto networking = new Networking(this);
   QObject::connect(uiState()->prime_state, &PrimeState::changed, networking, &Networking::setPrimeType);
 
   QList<QPair<QString, QWidget *>> panels = {
     {tr("Device"), device},
-    {tr("Network"), networking},
     {tr("Toggles"), toggles},
+    {tr("Network"), networking},
     {tr("Software"), new SoftwarePanel(this)},
-    {tr("Firehose"), new FirehosePanel(this)},
-    {tr("Developer"), new DeveloperPanel(this)},
+    {tr("NagasPilot"), new NPPanel(this)},
+    {tr("Trip"), new TripPanel(this)},
   };
 
   nav_btns = new QButtonGroup(this);
@@ -501,8 +464,8 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     nav_btns->addButton(btn);
     sidebar_layout->addWidget(btn, 0, Qt::AlignRight);
 
-    const int lr_margin = name != tr("Network") ? 50 : 0;  // Network panel handles its own margins
-    panel->setContentsMargins(lr_margin, 25, lr_margin, 25);
+    const int lr_margin = name != tr("Network") ? 30 : 0;  // Network panel handles its own margins
+    panel->setContentsMargins(lr_margin, 40, lr_margin, 40);
 
     ScrollView *panel_frame = new ScrollView(panel, this);
     panel_widget->addWidget(panel_frame);
@@ -519,7 +482,26 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
 
   sidebar_widget->setFixedWidth(500);
   main_layout->addWidget(sidebar_widget);
-  main_layout->addWidget(panel_widget);
+
+  // Create right column with model selector on top and panel_widget below
+  QWidget* right_column = new QWidget(this);
+  QVBoxLayout* right_layout = new QVBoxLayout(right_column);
+  right_layout->setContentsMargins(0, 0, 0, 0);
+  right_layout->setSpacing(20); // Space between model selector and panel
+
+  // Create the ModelSelector button at the top of right column
+  ModelSelector* model_selector = new ModelSelector(this);
+  right_layout->addWidget(model_selector);
+
+  // Set up panel widget and nav button references
+  model_selector->setPanelWidget(panel_widget);
+  model_selector->setNavButtonGroup(nav_btns);
+
+  // Add panel_widget below the model selector
+  right_layout->addWidget(panel_widget, 1); // Give panel_widget stretch priority
+
+  // Add right column to main layout
+  main_layout->addWidget(right_column);
 
   setStyleSheet(R"(
     * {

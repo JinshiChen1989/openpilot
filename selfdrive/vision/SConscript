@@ -1,0 +1,16 @@
+Import('env', 'envCython', 'cereal', 'messaging', 'visionipc', 'common')
+
+lenv = env.Clone()
+
+# Build YOLOv8 daemon as Python module
+# This SConscript ensures the vision module is properly integrated into the build system
+# No C/C++ compilation needed for Python-only YOLOv8 daemon
+
+# The yolov8_daemon.py module depends on:
+# - messaging (for publishing detections)
+# - visionipc (for camera data)
+# - common (for logging)
+# - cereal (for message definitions)
+
+# All dependencies are imported and available for the build system
+# YOLOv8 daemon will be launched as a Python process by the manager

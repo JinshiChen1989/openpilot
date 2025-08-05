@@ -20,6 +20,7 @@ from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
 from openpilot.selfdrive.car.car_specific import MockCarState
+from opendbc.safety import ALTERNATIVE_EXPERIENCE
 
 REPLAY = "REPLAY" in os.environ
 
@@ -82,6 +83,8 @@ class Car:
 
     is_release = self.params.get_bool("IsReleaseBranch")
 
+    np_params = 0
+
     if CI is None:
       # wait for one pandaState and one CAN packet
       print("Waiting for CAN messages...")
@@ -99,7 +102,13 @@ class Car:
         with car.CarParams.from_bytes(cached_params_raw) as _cached_params:
           cached_params = _cached_params
 
-      self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, num_pandas, cached_params)
+      # Set lateral flag based on unified lateral control mode (1=Lanekeep mode)
+      dlp_mode = int(self.params.get("np_dlp_mode", "0"))
+      if dlp_mode == 1:  # Lanekeep mode
+        np_params |= structs.NPFlags.LateralALKA
+
+
+      self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, num_pandas, np_params, cached_params)
       self.RI = interfaces[self.CI.CP.carFingerprint].RadarInterface(self.CI.CP)
       self.CP = self.CI.CP
 
@@ -109,7 +118,14 @@ class Car:
       self.CI, self.CP = CI, CI.CP
       self.RI = RI
 
+    if self.params.get_bool("np_lon_ext_radar"):
+      from opendbc.car.radar_interface import RadarInterface
+      self.RI = RadarInterface(self.CI.CP)
+
     self.CP.alternativeExperience = 0
+    if np_params & structs.NPFlags.LateralALKA:
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALKA
+
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly
     self.CP.passive = not controller_available or self.CP.dashcamOnly
@@ -128,7 +144,7 @@ class Car:
       except Exception:
         pass
 
-      secoc_key = self.params.get("SecOCKey")
+      secoc_key = self.params.get("SecOCKey", encoding='utf8')
       if secoc_key is not None:
         saved_secoc_key = bytes.fromhex(secoc_key.strip())
         if len(saved_secoc_key) == 16:

@@ -2,15 +2,12 @@ import time
 import pyray as rl
 from dataclasses import dataclass
 from cereal import messaging, log
-from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.hardware import TICI
 from openpilot.system.ui.lib.application import gui_app, FontWeight, DEFAULT_FPS
+from openpilot.system.ui.lib.label import gui_text_box
 from openpilot.system.ui.lib.text_measure import measure_text_cached
-from openpilot.system.ui.widgets import Widget
-from openpilot.system.ui.widgets.label import gui_text_box
+from openpilot.selfdrive.ui.ui_state import ui_state
 
-AlertSize = log.SelfdriveState.AlertSize
-AlertStatus = log.SelfdriveState.AlertStatus
 
 ALERT_MARGIN = 40
 ALERT_PADDING = 60
@@ -24,11 +21,12 @@ ALERT_FONT_BIG = 88
 SELFDRIVE_STATE_TIMEOUT = 5  # Seconds
 SELFDRIVE_UNRESPONSIVE_TIMEOUT = 10  # Seconds
 
+
 # Constants
 ALERT_COLORS = {
-  AlertStatus.normal: rl.Color(0, 0, 0, 235),  # Black
-  AlertStatus.userPrompt: rl.Color(0xFE, 0x8C, 0x34, 235),  # Orange
-  AlertStatus.critical: rl.Color(0xC9, 0x22, 0x31, 235),  # Red
+  log.SelfdriveState.AlertStatus.normal: rl.Color(0, 0, 0, 235),  # Black
+  log.SelfdriveState.AlertStatus.userPrompt: rl.Color(0xFE, 0x8C, 0x34, 235),  # Orange
+  log.SelfdriveState.AlertStatus.critical: rl.Color(0xC9, 0x22, 0x31, 235),  # Red
 }
 
 
@@ -44,28 +42,27 @@ class Alert:
 ALERT_STARTUP_PENDING = Alert(
   text1="openpilot Unavailable",
   text2="Waiting to start",
-  size=AlertSize.mid,
-  status=AlertStatus.normal,
+  size=log.SelfdriveState.AlertSize.mid,
+  status=log.SelfdriveState.AlertStatus.normal,
 )
 
 ALERT_CRITICAL_TIMEOUT = Alert(
   text1="TAKE CONTROL IMMEDIATELY",
   text2="System Unresponsive",
-  size=AlertSize.full,
-  status=AlertStatus.critical,
+  size=log.SelfdriveState.AlertSize.full,
+  status=log.SelfdriveState.AlertStatus.critical,
 )
 
 ALERT_CRITICAL_REBOOT = Alert(
   text1="System Unresponsive",
   text2="Reboot Device",
-  size=AlertSize.full,
-  status=AlertStatus.critical,
+  size=log.SelfdriveState.AlertSize.full,
+  status=log.SelfdriveState.AlertStatus.critical,
 )
 
 
-class AlertRenderer(Widget):
+class AlertRenderer:
   def __init__(self):
-    super().__init__()
     self.font_regular: rl.Font = gui_app.font(FontWeight.NORMAL)
     self.font_bold: rl.Font = gui_app.font(FontWeight.BOLD)
 
@@ -76,32 +73,30 @@ class AlertRenderer(Widget):
     # Check if selfdriveState messages have stopped arriving
     if not sm.updated['selfdriveState']:
       recv_frame = sm.recv_frame['selfdriveState']
-      time_since_onroad = (sm.frame - ui_state.started_frame) / DEFAULT_FPS
+      if (sm.frame - recv_frame) > 5 * DEFAULT_FPS:
+        # Check if waiting to start
+        if recv_frame < ui_state.started_frame:
+          return ALERT_STARTUP_PENDING
 
-      # 1. Never received selfdriveState since going onroad
-      waiting_for_startup = recv_frame < ui_state.started_frame
-      if waiting_for_startup and time_since_onroad > 5:
-        return ALERT_STARTUP_PENDING
-
-      # 2. Lost communication with selfdriveState after receiving it
-      if TICI and not waiting_for_startup:
-        ss_missing = time.monotonic() - sm.recv_time['selfdriveState']
-        if ss_missing > SELFDRIVE_STATE_TIMEOUT:
-          if ss.enabled and (ss_missing - SELFDRIVE_STATE_TIMEOUT) < SELFDRIVE_UNRESPONSIVE_TIMEOUT:
-            return ALERT_CRITICAL_TIMEOUT
-          return ALERT_CRITICAL_REBOOT
+        # Handle selfdrive timeout
+        if TICI:
+          ss_missing = time.monotonic() - sm.recv_time['selfdriveState']
+          if ss_missing > SELFDRIVE_STATE_TIMEOUT:
+            if ss.enabled and (ss_missing - SELFDRIVE_STATE_TIMEOUT) < SELFDRIVE_UNRESPONSIVE_TIMEOUT:
+              return ALERT_CRITICAL_TIMEOUT
+            return ALERT_CRITICAL_REBOOT
 
     # No alert if size is none
     if ss.alertSize == 0:
       return None
 
     # Return current alert
-    return Alert(text1=ss.alertText1, text2=ss.alertText2, size=ss.alertSize.raw, status=ss.alertStatus.raw)
+    return Alert(text1=ss.alertText1, text2=ss.alertText2, size=ss.alertSize, status=ss.alertStatus)
 
-  def _render(self, rect: rl.Rectangle) -> bool:
-    alert = self.get_alert(ui_state.sm)
+  def draw(self, rect: rl.Rectangle, sm: messaging.SubMaster) -> None:
+    alert = self.get_alert(sm)
     if not alert:
-      return False
+      return
 
     alert_rect = self._get_alert_rect(rect, alert.size)
     self._draw_background(alert_rect, alert)
@@ -113,14 +108,13 @@ class AlertRenderer(Widget):
       alert_rect.height - 2 * ALERT_PADDING
     )
     self._draw_text(text_rect, alert)
-    return True
 
   def _get_alert_rect(self, rect: rl.Rectangle, size: int) -> rl.Rectangle:
-    if size == AlertSize.full:
+    if size == log.SelfdriveState.AlertSize.full:
       return rect
 
-    height = (ALERT_FONT_MEDIUM + 2 * ALERT_PADDING if size == AlertSize.small else
-              ALERT_FONT_BIG + ALERT_LINE_SPACING + ALERT_FONT_SMALL + 2 * ALERT_PADDING)
+    height = (ALERT_FONT_MEDIUM + 2 * ALERT_PADDING if size == log.SelfdriveState.AlertSize.small else
+             ALERT_FONT_BIG + ALERT_LINE_SPACING + ALERT_FONT_SMALL + 2 * ALERT_PADDING)
 
     return rl.Rectangle(
       rect.x + ALERT_MARGIN,
@@ -130,19 +124,19 @@ class AlertRenderer(Widget):
     )
 
   def _draw_background(self, rect: rl.Rectangle, alert: Alert) -> None:
-    color = ALERT_COLORS.get(alert.status, ALERT_COLORS[AlertStatus.normal])
+    color = ALERT_COLORS.get(alert.status, ALERT_COLORS[log.SelfdriveState.AlertStatus.normal])
 
-    if alert.size != AlertSize.full:
+    if alert.size != log.SelfdriveState.AlertSize.full:
       roundness = ALERT_BORDER_RADIUS / (min(rect.width, rect.height) / 2)
       rl.draw_rectangle_rounded(rect, roundness, 10, color)
     else:
       rl.draw_rectangle_rec(rect, color)
 
   def _draw_text(self, rect: rl.Rectangle, alert: Alert) -> None:
-    if alert.size == AlertSize.small:
+    if alert.size == log.SelfdriveState.AlertSize.small:
       self._draw_centered(alert.text1, rect, self.font_bold, ALERT_FONT_MEDIUM)
 
-    elif alert.size == AlertSize.mid:
+    elif alert.size == log.SelfdriveState.AlertSize.mid:
       self._draw_centered(alert.text1, rect, self.font_bold, ALERT_FONT_BIG, center_y=False)
       rect.y += ALERT_FONT_BIG + ALERT_LINE_SPACING
       self._draw_centered(alert.text2, rect, self.font_regular, ALERT_FONT_SMALL, center_y=False)
