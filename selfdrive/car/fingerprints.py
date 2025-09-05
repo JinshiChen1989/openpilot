@@ -1,8 +1,8 @@
 from selfdrive.car.interfaces import get_interface_attr
 
-
-FW_VERSIONS = get_interface_attr('FW_VERSIONS', combine_brands=True, ignore_none=True)
-_FINGERPRINTS = get_interface_attr('FINGERPRINTS', combine_brands=True, ignore_none=True)
+# BrownPanda-only filtering: Only load brownpanda vehicle fingerprints
+FW_VERSIONS = get_interface_attr('FW_VERSIONS', combine_brands=['brownpanda'], ignore_none=True)
+_FINGERPRINTS = get_interface_attr('FINGERPRINTS', combine_brands=['brownpanda'], ignore_none=True)
 
 _DEBUG_ADDRESS = {1880: 8}   # reserved for debug purposes
 

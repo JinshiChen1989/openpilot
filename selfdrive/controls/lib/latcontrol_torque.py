@@ -2,6 +2,7 @@ import math
 
 from cereal import log
 from common.numpy_fast import interp
+from common.filter_simple import FirstOrderFilter
 from selfdrive.controls.lib.latcontrol import LatControl
 from selfdrive.controls.lib.pid import PIDController
 from selfdrive.controls.lib.vehicle_model import ACCELERATION_DUE_TO_GRAVITY
@@ -30,6 +31,34 @@ class LatControlTorque(LatControl):
     self.torque_from_lateral_accel = CI.torque_from_lateral_accel()
     self.use_steering_angle = self.torque_params.useSteeringAngle
     self.steering_angle_deadzone_deg = self.torque_params.steeringAngleDeadzoneDeg
+    
+    # DTSA (Dynamic Torque Steering Adjustment) for vehicles that support it
+    # Adaptive timing compensation for EPS delay variations
+    self.enable_dtsa = self._check_dtsa_enabled(CP)
+    if self.enable_dtsa:
+      self._init_dtsa(CP)
+      
+  def _check_dtsa_enabled(self, CP):
+    """Check if DTSA is enabled for this vehicle"""
+    return (hasattr(CP.lateralParams, 'dtsaEnable') and 
+            CP.lateralParams.dtsaEnable and
+            hasattr(CP.lateralTuning, 'torque'))  # Only for torque mode
+      
+  def _init_dtsa(self, CP):
+    """Initialize DTSA system using CarParams configuration"""
+    # DTSA timing parameters from CarParams
+    self._dtsa_tau_s = CP.lateralParams.dtsaTau if hasattr(CP.lateralParams, 'dtsaTau') else 0.5
+    self._dtsa_dt_s = 0.01  # control timestep
+    self._dtsa_filter = FirstOrderFilter(0.0, self._dtsa_tau_s, self._dtsa_dt_s)
+    self._dtsa = 0.0  # current timing adjustment
+    self._dtsa_max = CP.lateralParams.dtsaMaxTrim if hasattr(CP.lateralParams, 'dtsaMaxTrim') else 0.4
+    self._dtsa_scale = CP.lateralParams.dtsaScale if hasattr(CP.lateralParams, 'dtsaScale') else 0.02
+    self._dtsa_deadband = CP.lateralParams.dtsaDeadband if hasattr(CP.lateralParams, 'dtsaDeadband') else 0.05
+    self._dtsa_min_speed = CP.lateralParams.dtsaMinSpeed if hasattr(CP.lateralParams, 'dtsaMinSpeed') else 5.0
+    
+    # State tracking
+    self._last_req_torque = 0.0
+    self._last_applied_torque = None
 
   def update_live_torque_params(self, latAccelFactor, latAccelOffset, friction):
     self.torque_params.latAccelFactor = latAccelFactor
@@ -87,5 +116,44 @@ class LatControlTorque(LatControl):
       pid_log.desiredLateralAccel = desired_lateral_accel
       pid_log.saturated = self._check_saturation(self.steer_max - abs(output_torque) < 1e-3, CS, steer_limited)
 
+      # DTSA: Update adaptive timing adjustment for supported vehicles
+      if self.enable_dtsa:
+        self._update_dtsa(output_torque, CS, steer_limited)
+
     # TODO left is positive in this convention
     return -output_torque, 0.0, pid_log
+    
+  def _update_dtsa(self, requested_torque, CS, steer_limited):
+    """Update DTSA timing adjustment based on torque mismatch"""
+    # Track requested torque (before sign flip)
+    self._last_req_torque = float(-requested_torque)
+    
+    # Get actual applied torque from EPS (if available)
+    applied = getattr(CS, 'steeringTorque', None)
+    if applied is not None:
+      self._last_applied_torque = float(applied)
+      
+      # Only learn when conditions are good:
+      # - High enough speed (avoid low-speed noise)
+      # - No driver interference 
+      # - Not torque-limited by safety
+      learning_conditions = (
+        CS.vEgo > self._dtsa_min_speed and
+        not CS.steeringPressed and 
+        not steer_limited
+      )
+      
+      if learning_conditions:
+        # Measure torque mismatch: if EPS perfectly tracks controller, 
+        # requested + applied ≈ 0 (opposite signs cancel out)
+        mismatch = abs(self._last_req_torque + self._last_applied_torque)
+        
+        # Apply configurable deadband to ignore sensor noise
+        if mismatch < self._dtsa_deadband:
+          mismatch = 0.0
+          
+        # Convert mismatch to timing adjustment using configurable scaling
+        dtsa_raw = mismatch * self._dtsa_scale
+        
+        # Smooth with low-pass filter and apply limits
+        self._dtsa = max(0.0, min(self._dtsa_filter.update(dtsa_raw), self._dtsa_max))

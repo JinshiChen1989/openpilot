@@ -527,6 +527,13 @@ struct CarParams {
   struct LateralParams {
     torqueBP @0 :List(Int32);
     torqueV @1 :List(Int32);
+    # DTSA (Dynamic Torque Steering Adjustment) parameters for brownpanda vehicles
+    dtsaEnable @2 :Bool;
+    dtsaTau @3 :Float32;
+    dtsaMaxTrim @4 :Float32;
+    dtsaScale @5 :Float32;
+    dtsaDeadband @6 :Float32;
+    dtsaMinSpeed @7 :Float32;
   }
 
   struct LateralPIDTuning {
@@ -618,6 +625,7 @@ struct CarParams {
     hongqi @26;
     body @27;
     hyundaiCanfd @28;
+    brownpanda @29;
   }
 
   enum SteerControlType {

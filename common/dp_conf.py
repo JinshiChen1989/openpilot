@@ -271,28 +271,40 @@ def gen_log_struct():
 function to generate support car list
 '''
 def get_support_car_list():
-  attrs = ['FINGERPRINTS', 'FW_VERSIONS']
-  cars = dict({"cars": []})
-  models = []
-  for car_folder in [x[0] for x in os.walk('/data/openpilot/selfdrive/car')]:
-    try:
-      car_name = car_folder.split('/')[-1]
-      if car_name != "mock":
-        for attr in attrs:
-          values = __import__('selfdrive.car.%s.values' % car_name, fromlist=[attr])
-          if hasattr(values, attr):
-            attr_values = getattr(values, attr)
-          else:
-            continue
-          if isinstance(attr_values, dict):
-            for f, v in attr_values.items():
-              if f not in models:
-                models.append(f)
-    except (ImportError, IOError, ValueError):
-      pass
-  models.sort()
-  cars["cars"] = models
-  return json.dumps(cars)
+  """Get list of all supported cars from automatic discovery"""
+  try:
+    # Import here to avoid circular dependencies
+    from selfdrive.car.interfaces import get_interface_attr
+    
+    # Get all car models from automatic discovery
+    cars_dict = get_interface_attr('CAR', combine_brands=True, ignore_none=True)
+    
+    # Extract all car model names into a flat list
+    all_cars = []
+    for brand_cars in cars_dict.values():
+      if hasattr(brand_cars, '__dict__'):
+        # CAR class - extract all attribute values that don't start with __
+        car_models = [getattr(brand_cars, attr) for attr in brand_cars.__dict__.keys() 
+                     if not attr.startswith('__')]
+        all_cars.extend(car_models)
+    
+    # Sort for consistent ordering
+    all_cars.sort()
+    
+    cars_json = {"cars": all_cars}
+    return json.dumps(cars_json)
+    
+  except Exception as e:
+    # Fallback to basic car list if automatic discovery fails
+    print(f"Warning: Car discovery failed ({e}), using fallback list")
+    fallback_cars = {
+      "cars": [
+        # Include brownpanda cars plus some common ones as fallback
+        "BYD ATTO3", "BYD DOLPHIN", "DEEPAL S05",
+        "TOYOTA CAMRY 2018", "HONDA CIVIC 2016", "HYUNDAI SONATA 2020"
+      ]
+    }
+    return json.dumps(fallback_cars)
 
 '''
 function to init param value.
