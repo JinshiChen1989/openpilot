@@ -58,7 +58,7 @@ separate repo, not a submodule.
 | Repo | Branch | Platform | UI |
 |---|---|---|---|
 | `openpilot` | `dev/01M` | ExoPilot 01M — RK3588, 1024×600 | C++ Qt |
-| `openpilot` | **`dev/02M`** | ExoPilot 02M — RK3576, 1600×600 | PySide6, Nagasware |
+| `openpilot` | **`dev/02M`** | ExoPilot 02M — RK3576, 1600×600 | PyQt5, Nagasware |
 | `visionpilot` | `EVP09` | 02M | the ROS 2 stack, unchanged |
 
 Earlier drafts of this section argued between a fork of the visionpilot repo
@@ -169,24 +169,24 @@ features. That is also why this is a branch rather than a repo (§1).
 |---|---|---|---|
 | Design reuse from Nagasware/VisionPilot | **direct** — same toolkit, QSS carries over | none — immediate-mode redraw, no stylesheets | none — C++ rewrite |
 | LOC to write from scratch | ~3–5k (bridges + camera widget) | ~20k+ (re-implement 84k LOC of design) | ~14k C++ |
-| Build-time deps | `python3-pyqt5` or `python3-pyside2` (both jammy/arm64 — §12.3) | `pyray` wheel | Qt5 dev headers, `lrelease`, SCons Qt env |
+| Build-time deps | `python3-pyqt5` (jammy/arm64) | `pyray` wheel | Qt5 dev headers, `lrelease`, SCons Qt env |
 | Runtime deps | libQt5{Core,Gui,Widgets} — already on the device | libGL only | libQt5{Core,Gui,Widgets} |
-| Licence | GPLv3 (PyQt5, dev) → **LGPLv3** (PySide2, ship) | zlib/libpng — permissive | LGPLv3 (Qt5 libs) |
+| Licence | **GPLv3 (PyQt5)** — deferred, see §12.1 | zlib/libpng — permissive | LGPLv3 (Qt5 libs) |
 | Camera zero-copy | needs new `QOpenGLWidget` + EGL glue (§4.3) | already written (`selfdrive/ui/onroad/cameraview.py`) | already written (C++) |
 | Upstream drift | diverges from upstream's raylib direction | tracks upstream | dead end (upstream is removing it) |
 
-**Recommendation: Qt Widgets + QSS on Qt 5.15.** Binding: PyQt5 now, PySide2 before shipping (§12.1a).
+**Recommendation: Qt Widgets + QSS on Qt 5.15.** Binding: PyQt5, decided (§12.1).
 The design being ported *is* Qt Widgets — ~71k LOC across the two repos,
 including 2,191 LOC of QSS theming that has no raylib equivalent. Choosing
 raylib means re-drawing the entire Nagasware design by hand in immediate mode,
 which is the opposite of "port the UI we already have".
 
-The *binding* is a separate decision from the toolkit, and external review
-(§12) overturned the original PyQt5 answer on two grounds — **PyQt5 is GPLv3**
-(incompatible with openpilot's MIT licence without a Riverbank commercial
-licence), and **PyQt5 maintenance is classified inactive**. PySide6
-is LGPLv3 and maintained by The Qt Company. See §12.1 for the full argument and
-the migration cost.
+The *binding* is a separate decision from the toolkit. External review (§12)
+raised two objections to PyQt5 — it is **GPLv3**, incompatible with
+openpilot's MIT licence without a Riverbank commercial licence, and its
+maintenance is classified inactive. Both stand. The decision is still PyQt5,
+with the licence question explicitly deferred rather than answered, because
+nothing here is being distributed. See §12.1.
 
 Note the dependency argument cuts **for** PyQt5, not against: deleting
 `selfdrive/ui/qt/` removes the Qt5 *build* dependency (dev headers, `lrelease`,
@@ -558,7 +558,7 @@ speed is a safety defect, not a UX preference.
 ### 5.7 Onroad cameras and blind spot — settled behaviour to port
 
 Implemented on openpilot `dev/01M` (2026-09-10) and now settled product
-behaviour. The PySide6 UI must reproduce it, not re-decide it.
+behaviour. The Python UI must reproduce it, not re-decide it.
 
 **Camera overlays**
 
@@ -680,7 +680,7 @@ environment this was staged from. First task on a machine with the toolchain.
 
 ### P2 — UI shell + state plumbing (2 wk)
 - Nagasware tree drops in unconverted (PyQt5), behind the binding shim
-  (§12.1a). The PySide2 switch is deferred, not skipped.
+  (§12.1). The licence question is deferred, not skipped.
 - `UIState` singleton: one `SubMaster`, one 20 Hz `QTimer`, offroad/onroad
   transitions (mirror `selfdrive/ui/ui_state.py`).
 - Port the 76 ROS-free files verbatim; rewrite the 4 bridges (§5.2).
@@ -823,9 +823,9 @@ all three should be scheduled alongside §7.2 for hardware bring-up.
 | Thermal/fan and PMIC monitoring are silent no-ops on RK3576 | **high** | §7.4 — on an 02M-only line this is thermal safety, not a caveat; schedule with P6 |
 | All NPU tasks land on core 1 (empty allocation map) | medium | §7.4 — port VisionPilot's TOPS budget into `hal.tuning.npu` |
 | Nagasware offroad pages assume its own config layer, not `Params` | medium | rewrite the params layer per §5.5; keep the page/section structure |
-| PyQt5's GPLv3 licence vs openpilot's MIT | **high** | port to PySide6 (LGPLv3) as a mechanical pass in P2, before cereal wiring (§12.1) |
+| PyQt5's GPLv3 licence vs openpilot's MIT | **high** | unresolved and deferred — not distributing. Qt imports are confined to `qt.py` so a PySide2 conversion stays mechanical (§12.1) |
 | EGLFS forbids mixing GL windows with QWidget content; target plugin unknown | **high** | P1 gate — name the plugin and prove `QOpenGLWidget` composites on real 02M (§4.3, §12.2) |
-| Binding not packaged for the target | low | resolved — `python3-pyside2` is in jammy for arm64 (§12.3) |
+| Binding not packaged for the target | low | resolved — `python3-pyqt5` is in jammy for arm64 |
 | VisionPilot UI's `.x_m()`/`.y_m()` defect class (9 sites) | medium | don't port those paths — take Nagasware's equivalents (§5.4, §5.6); grep the tree before reusing any VisionPilot interaction code |
 | Gesture can pull the driving view off-screen at speed | medium | port both safety interlocks in §5.6 and test them explicitly |
 | RGA wrapper is gated on `is_rk3588()` | low | one-line predicate change to RK3576 + hardware verification (§4.3) |
@@ -877,7 +877,7 @@ system in §5.6, at full 1600×600 rather than in 576px of leftover width.
 `BEVWidget` was also removed on `dev/01M`, replaced by an edge blind-spot
 indicator; `AnnotatedCameraWidget`'s corner overlay became unconditional and
 the side/rear camera overlays went full screen (§5.7). Those are the settled
-onroad behaviours this branch must reproduce in PySide6.
+onroad behaviours this branch must reproduce.
 
 ### 11.2 What stays here that `dev/01M` drops
 
@@ -946,82 +946,62 @@ Researched 2026-09-10 against current sources, to test this plan's assumptions
 rather than restate them. Three findings changed recommendations; one is a
 counter-argument worth recording even though it doesn't.
 
-### 12.1 PyQt5 is the wrong binding — use PySide6
+### 12.1 Binding: PyQt5, decided — no PySide
 
-**Licence.** PyQt5 is GPLv3 or a paid Riverbank commercial licence. PySide6
-("Qt for Python", from The Qt Company) is LGPLv3. Under LGPL you may ship a
-proprietary or differently-licensed application linking the library, provided
-modifications to the library itself are published; under GPLv3 the entire
-distributed work must be GPL.
+**Settled 2026-09-12: PyQt5 only, and the PySide fallback has been removed.**
 
-openpilot is **MIT**. Shipping a PyQt5 UI in a distributed product would force
-GPLv3 on the combined work or require buying commercial seats. Nagasware's 48,545 LOC are written against PyQt5 today, so
-this is not hypothetical — it is the licence the port would inherit by default.
+This section previously recommended migrating to PySide2 on licence grounds
+and the code carried a three-binding shim in the meantime. That is no longer
+the plan. The reasoning for the change, and the cost being accepted:
 
-**Maintenance.** PyQt5 is classified *Inactive* on maintenance signals
-(release cadence, repo activity), and Qt 5.15 standard support ended
-26 May 2025 — extended security maintenance is a paid subscription, with the
-KDE patch collection covering open-source users. For a product with a
-multi-year field life this is an unmaintained binding on an end-of-life
-toolkit.
+**What the fallback actually cost.** Supporting more than one binding meant
+every Qt spelling had to be checked against all of them, and the abstraction
+leaked anyway at exactly the places it was supposed to cover: `QDBusMessage`
+enums are scoped in PySide6 and unscoped in PyQt5, `QSpinBox` coerces floats
+in PySide and rejects them in PyQt5, `QOpenGLWidget` lives in a different
+module in Qt6. Each of those needed a bespoke workaround rather than being
+absorbed by the shim. The tests ran twice, against a binding nothing ships.
 
-**Migration cost, PyQt5 → PySide6.** Mechanical but broad:
-`pyqtSignal`/`pyqtSlot`/`pyqtProperty` → `Signal`/`Slot`/`Property`;
-`exec_()` → `exec()`; Qt6 scoped enums (`Qt.AlignLeft` →
-`Qt.AlignmentFlag.AlignLeft`, though PySide6 has a "forgiveness mode" that
-accepts the short form); `QAction` moves from `QtWidgets` to `QtGui`;
-`QRegExp` → `QRegularExpression`. Two de-risking options: **QtPy**, an
-abstraction layer over PyQt5/PyQt6/PySide2/PySide6 that lets the port proceed
-binding-agnostically, and PyQt5-shim layers that re-route calls to PySide6.
+**What is kept.** `selfdrive/ui/eop/qt.py` still exists and every Qt name the
+UI uses still comes through it. That is worth having with one binding: it is
+the single place a future Qt move gets edited, and it is where `exec_()` and
+`horizontalAdvance()` are wrapped.
 
-**Corrected 2026-09-10, once the target OS was pinned: use PySide2, not
-PySide6.** The runtime is **Ubuntu 22.04 on RK3576**, and that decides it:
+**The licence position, stated plainly.** PyQt5 is GPLv3 or a paid Riverbank
+commercial licence. openpilot is MIT. Distributing a PyQt5 UI would force
+GPLv3 on the combined work or require commercial seats. **This is not
+resolved — it is deferred**, deliberately, because this is a research project
+that is not being distributed. It has to be answered before anything ships,
+and the options remain what they were: buy Riverbank seats, or convert to
+PySide2 (LGPLv3, `python3-pyside2` 5.15.2 is in jammy universe for arm64).
+The conversion is mechanical — `pyqtSignal`→`Signal`, `pyqtSlot`→`Slot`,
+`exec_()` unchanged, no Qt6 scoped enums — and confining Qt imports to
+`qt.py` keeps it that way.
 
-- `python3-pyside2` **5.15.2 is in jammy universe, built for arm64** —
-  `apt install`, done. PySide6 is not in jammy at all, and has no official
-  aarch64 wheels (§12.3), so it means building Shiboken and PySide from source
-  on the device or in a cross-toolchain. Hours of build, and a maintenance
-  burden every time it needs rebuilding.
-- **PySide2 is LGPLv3 too.** The entire licence argument against PyQt5 is
-  preserved; only the Qt major version changes.
-- **Qt 5.15 is already on the device**, running the current C++ UI. Its EOL
-  status is therefore *not new exposure* — it is the status quo. Choosing Qt6
-  would put a second Qt major version on the image or force a platform-wide
-  migration, neither of which this port should be carrying.
-- **The conversion gets much cheaper.** PyQt5 → PySide2 is
-  `pyqtSignal`→`Signal`, `pyqtSlot`→`Slot`, keep `exec_()`, drop `QVariant`/
-  `QString`. None of Qt6's scoped enums, `QAction` relocation or
-  `QRegExp`→`QRegularExpression`. Across Nagasware's 48,545 LOC that
-  difference is substantial.
-
-The Qt5 EOL point still stands as a *platform* question — when the image moves
-to Qt6, this UI moves with it — but that is a BSP decision, not a UI one, and
-it should be made once for the whole device rather than forced by the UI port.
+**Maintenance.** PyQt5 is classified *Inactive* on maintenance signals, and
+Qt 5.15 standard support ended 26 May 2025. That is not new exposure: Qt 5.15
+is already on the device running the C++ UI, so this is the status quo rather
+than something the UI port introduces. When the image moves to Qt6 this UI
+moves with it — a BSP decision, made once for the whole device, not forced by
+the UI.
 
 ### 12.1a Which binding is actually in use, and when that changes
 
-**Now: PyQt5.** All three bindings are packaged for jammy on arm64, so this is
-not an availability question — it is a cost question, and PyQt5 wins today for
-two reasons. Nagasware's 48,545 LOC is already written against it, so the port
-starts with zero conversion. And this is a research project, where GPLv3 is
-not yet a constraint.
+**PyQt5, and only PyQt5.** `python3-pyqt5` is packaged for jammy on arm64,
+Nagasware's 48,545 LOC is already written against it, so the port starts with
+zero conversion. The multi-binding shim that used to sit here has been
+removed; see §12.1 for why it was not paying for itself.
 
-**Before anything ships: PySide2.** PyQt5 is GPLv3 or a paid Riverbank licence
-and openpilot is MIT, so distributing a PyQt5 UI forces GPL on the combined
-work. That decision does not go away by being deferred; it only gets more
-expensive as the UI grows.
+Every Qt name still comes through `selfdrive/ui/eop/qt.py`. With one binding
+that is no longer about keeping an escape route provably open — it is simply
+the one file a Qt move gets edited in, and where `exec_()` and
+`horizontalAdvance()` are wrapped. It keeps a future PySide2 conversion
+mechanical without the cost of pretending to support it today.
 
-Deferring is cheap **only if the code accumulates no binding-specific
-spellings meanwhile**, which is what `selfdrive/ui/eop/qt.py` enforces. It
-resolves PyQt5 → PySide2 → PySide6, aliases `pyqtSignal`/`pyqtSlot` to
-`Signal`/`Slot`, and normalises `QOpenGLWidget`'s module and `exec_()` vs
-`exec()`. Everything else is written to the intersection on purpose: unscoped
-enum access is native in Qt5 and accepted by PySide6's forgiveness mode.
-
-Held to that, the switch is an edit to one file rather than a pass over the
-whole UI. `EOP_QT_BINDING=pyqt5|pyside2|pyside6` forces a binding so this can
-be *proved* rather than assumed — the current component tests pass under both
-PyQt5 and PySide6, which is the check that keeps the escape route open.
+**The licence question is deferred, not answered.** PyQt5 is GPLv3 or a paid
+Riverbank licence and openpilot is MIT, so distributing a PyQt5 UI forces GPL
+on the combined work. Nothing here is being distributed, which is why this is
+acceptable now and why it must be settled before that changes.
 
 **Also check** whether any Nagasware component was written against a
 GPL-incompatible or PyQt-specific API (`sip`, `PyQt5.QtChart`) before assuming
