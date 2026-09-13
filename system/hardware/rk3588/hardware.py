@@ -26,6 +26,8 @@ class RK3588Hardware(RockchipHardware):
     methods (modem_power_on/off, etc.) fail closed.
     """
 
+    HAL_PREFIX = "rk3588"
+
     try:
         from hal.platform import rk3588_pins
         WIFI_CHIP = rk3588_pins.WIFI_CHIP

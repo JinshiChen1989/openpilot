@@ -6,9 +6,13 @@
 
 // Encoder selection:
 // - QCOM2: Used V4LEncoder (Qualcomm-specific, now excluded from build)
-// - Rockchip RK3588: native MppEncoder (MPP + RGA)
+// - Rockchip (any supported SoC): native MppEncoder (MPP + RGA)
 // - Other / dev PC: FfmpegEncoder
-#if defined(RK3588)
+//
+// ROCKCHIP_MPP is set by SConstruct exactly when system/loggerd/SConscript
+// compiles mpp_encoder.cc. Testing a single board's macro here meant the
+// other Rockchip board fell back to software encoding without a word.
+#if defined(ROCKCHIP_MPP)
   #include "system/loggerd/encoder/mpp_encoder.h"
   #define Encoder MppEncoder
 #else

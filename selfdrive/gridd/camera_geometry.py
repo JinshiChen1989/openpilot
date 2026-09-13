@@ -60,6 +60,7 @@ from __future__ import annotations
 import numpy as np
 from dataclasses import dataclass
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware import HARDWARE
 
 @dataclass
 class CameraIntrinsics:
@@ -168,8 +169,10 @@ class CameraArrayGeometry:
     # rather than living in this public repo. Without hal, these are empty and
     # _load_exo01_defaults() produces no cameras (caller must supply a calibration
     # YAML via from_calibration_file() instead).
+    _hal_geo = HARDWARE.hal_module("camera_geometry")
     try:
-        from hal.platform import rk3588_camera_geometry as _hal_geo
+        if _hal_geo is None:
+            raise ImportError("no camera geometry for this board")
         EXO01_CAMERAS = _hal_geo.CAMERAS
         EXO01_DEFAULT_POSITIONS = {name: np.array(pos) for name, pos in _hal_geo.POSITIONS_M.items()}
         _EXO01_YAW_DEG = _hal_geo.YAW_DEG

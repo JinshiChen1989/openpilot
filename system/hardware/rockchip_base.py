@@ -24,6 +24,7 @@ does not need to reimplement anything here.
 
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 
@@ -65,11 +66,36 @@ class RockchipHardware(HardwareBase):
     _cam_geo = None
     _usb_cameras: tuple = ()
 
+    # The board's prefix inside the closed hal package: `rk3588` resolves
+    # `hal.platform.rk3588_pins`, `hal.platform.rk3588_thermal`, and so on.
+    # Subclasses set it; hal_module() below is what daemons call.
+    HAL_PREFIX = ""
+
     class Paths:
         """System paths. Identical on both boards -- same image layout."""
         SHM_PATH = "/dev/shm"
         DATA_PATH = "/data/media/0"
         PARAMS_PATH = "/data/params"
+
+    # ---- board data from the closed hal package --------------------------
+
+    @classmethod
+    def hal_module(cls, suffix: str):
+        """Import `hal.platform.<HAL_PREFIX>_<suffix>` for the running board.
+
+        See HardwareBase.hal_module for why daemons go through this instead
+        of importing a board's module by name. Returns None when hal is not
+        installed, when the board has no HAL_PREFIX, or when this board has
+        no module of that kind -- all of which are ordinary states that the
+        caller handles with its in-repo defaults.
+        """
+        if not cls.HAL_PREFIX:
+            return None
+        try:
+            return importlib.import_module(
+                f"hal.platform.{cls.HAL_PREFIX}_{suffix}")
+        except ImportError:
+            return None
 
     # ---- identity --------------------------------------------------------
 

@@ -56,14 +56,20 @@ if platform.system() == "Darwin":
   brew_prefix = subprocess.check_output(['brew', '--prefix'], encoding='utf8').strip()
 assert arch in ["aarch64", "x86_64", "Darwin"]
 
-# Detect specific SoC for platform-specific optimizations (RK3588)
+# Detect the specific Rockchip SoC for platform-specific optimizations.
+# Matching a single board here meant the other board built as if it had no
+# SoC at all -- silently dropping the MPP hardware encoder in loggerd (see
+# system/loggerd/SConscript) rather than failing the build.
+# The board(s) this branch supports. One entry per branch: EOP10 and 01M are
+# RK3588, 02M is RK3576. The lookup below is board-generic so only this list
+# changes between branches.
+ROCKCHIP_SOCS = ['rk3588']
 soc = None
 if arch == "aarch64":
   try:
     with open('/proc/device-tree/compatible', 'r') as f:
       compatible = f.read()
-      if 'rk3588' in compatible:
-        soc = 'rk3588'
+      soc = next((s for s in ROCKCHIP_SOCS if s in compatible), None)
   except (FileNotFoundError, OSError):
     pass
 
@@ -114,8 +120,16 @@ else:
   ]
 
   if arch == "aarch64":
-    cflags += ["-DROCKCHIP", "-DRK3588"]
-    cxxflags += ["-DROCKCHIP", "-DRK3588"]
+    # The SoC define follows the detected board -- defining the wrong one
+    # compiles the wrong register addresses into native code. ROCKCHIP_MPP
+    # says "this build has the MPP hardware encoder", and is the single
+    # condition both system/loggerd/SConscript and encoderd.cc key off, so
+    # the sources compiled and the #if selecting them cannot disagree.
+    rk_defines = ["-DROCKCHIP"]
+    if soc:
+      rk_defines += [f"-D{soc.upper()}", "-DROCKCHIP_MPP"]
+    cflags += rk_defines
+    cxxflags += rk_defines
     cpppath += [
       "/usr/include/rockchip",
       "/usr/include/rga",

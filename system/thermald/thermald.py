@@ -37,17 +37,14 @@ from openpilot.system.thermald.thermal_zones import (
 )
 from openpilot.system.thermald.fan_control import FanController
 from openpilot.system.thermald.hailo_thermal import HailoThermalMonitor
+from openpilot.system.hardware import HARDWARE
 
-try:
-  from hal.platform.rk3588_thermal import (
-    NPU_DEVFREQ_GOVERNOR_PATHS as _NPU_GOV_PATHS,
-    GPU_DEVFREQ_GOVERNOR_PATHS as _GPU_GOV_PATHS,
-    THERMAL_PROTECTION_DEFAULTS as _THERMAL_DEFAULTS,
-  )
-except ImportError:
-  _NPU_GOV_PATHS = []
-  _GPU_GOV_PATHS = []
-  _THERMAL_DEFAULTS = {}
+# Devfreq governor paths are device-tree addresses and differ per board, so
+# they come from the running board's hal module rather than a fixed list.
+_hal_thermal = HARDWARE.hal_module("thermal")
+_NPU_GOV_PATHS = getattr(_hal_thermal, "NPU_DEVFREQ_GOVERNOR_PATHS", [])
+_GPU_GOV_PATHS = getattr(_hal_thermal, "GPU_DEVFREQ_GOVERNOR_PATHS", [])
+_THERMAL_DEFAULTS = getattr(_hal_thermal, "THERMAL_PROTECTION_DEFAULTS", {})
 
 
 class ProtectionStatus(Enum):

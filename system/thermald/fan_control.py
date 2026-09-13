@@ -7,11 +7,12 @@ from enum import IntEnum
 from dataclasses import dataclass
 from collections import OrderedDict
 from typing import cast
+from openpilot.system.hardware import HARDWARE
 
-try:
-  from hal.platform.rk3588_thermal import FAN_BANDS as _FAN_BANDS
-except ImportError:
-  _FAN_BANDS = None
+# Fan bands are board data: resolved from whichever board is running, never
+# from a board name spelled here. None when hal is absent (dev PC, CI).
+_hal_thermal = HARDWARE.hal_module("thermal")
+_FAN_BANDS = getattr(_hal_thermal, "FAN_BANDS", None)
 
 
 class ThermalStatus(IntEnum):

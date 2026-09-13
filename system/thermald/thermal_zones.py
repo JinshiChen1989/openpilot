@@ -8,11 +8,10 @@ import os
 from dataclasses import dataclass
 
 from openpilot.system.thermald.hailo_thermal import HailoThermalMonitor, discover_hailo_devices
+from openpilot.system.hardware import HARDWARE
 
-try:
-  from hal.platform.rk3588_thermal import THERMAL_ZONE_TYPE_MAP as _TYPE_MAP
-except ImportError:
-  _TYPE_MAP = {}  # type: ignore[assignment]
+_hal_thermal = HARDWARE.hal_module("thermal")
+_TYPE_MAP = getattr(_hal_thermal, "THERMAL_ZONE_TYPE_MAP", {})
 
 
 @dataclass
@@ -120,15 +119,12 @@ def discover_hailo_zones() -> list[HailoThermalMonitor]:
     return monitors
 
 
-try:
-  from hal.platform.rk3588_thermal import DEFAULT_THERMAL_ZONES as _DEFAULT_ZONES
-except ImportError:
-  _DEFAULT_ZONES = {
-    "CPU": (0, 85.0, 75.0),
-    "GPU": (1, 85.0, 75.0),
-    "NPU": (2, 85.0, 75.0),
-    "PMIC": (3, 90.0, 80.0),
-  }
+_DEFAULT_ZONES = getattr(_hal_thermal, "DEFAULT_THERMAL_ZONES", None) or {
+  "CPU": (0, 85.0, 75.0),
+  "GPU": (1, 85.0, 75.0),
+  "NPU": (2, 85.0, 75.0),
+  "PMIC": (3, 90.0, 80.0),
+}
 
 
 def get_default_zones() -> dict[str, ThermalZone]:

@@ -31,6 +31,7 @@ import cv2
 import numpy as np
 
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware import HARDWARE
 
 
 # ---------------------------------------------------------------------------
@@ -56,9 +57,9 @@ DEFAULT_CY = 360.0
 def _load_side_intrinsics(camera_name: str) -> tuple[float, float, float, float]:
   """Load side camera intrinsics from exopilot HAL; fall back to defaults."""
   try:
-    from hal.platform.rk3588_camera_geometry import FOCAL_PX, IMAGE_SIZE_PX
-    w, h = IMAGE_SIZE_PX[camera_name]
-    fx, fy = FOCAL_PX[camera_name]
+    geo = HARDWARE.hal_module("camera_geometry")
+    w, h = geo.IMAGE_SIZE_PX[camera_name]
+    fx, fy = geo.FOCAL_PX[camera_name]
     return fx, fy, w / 2.0, h / 2.0
   except Exception:
     return DEFAULT_FX, DEFAULT_FY, DEFAULT_CX, DEFAULT_CY

@@ -138,6 +138,24 @@ class HardwareBase(ABC):
     def detect() -> bool:
         """Detect if this hardware is present."""
 
+
+    @classmethod
+    def hal_module(cls, suffix: str):
+        """Import this board's `hal.platform.<board>_<suffix>` module.
+
+        Board bring-up data (pins, thermal bands, camera paths and geometry)
+        ships from the closed exopilot `hal` package, one module per board.
+        Daemons must not spell a board name themselves -- the module they
+        want is whichever board is actually running, and a daemon that says
+        `rk3588` is a daemon that silently does the wrong thing on the other
+        board, or crashes on a branch where that board does not exist.
+
+        Returns None when hal is not installed or has no module for this
+        board, which is the normal state on a dev PC and in CI. Callers fall
+        back to their in-repo defaults rather than failing.
+        """
+        return None
+
     @abstractmethod
     def get_device_type(self) -> str:
         """Get device type string."""

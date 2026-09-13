@@ -20,7 +20,7 @@ if [ "${1:-}" = "--full" ]; then
   shift
 fi
 
-# --no-pytest: skip the RK3588/Rockchip pytest step, which needs cereal's
+# --no-pytest: skip the host-side hardware pytest step, which needs cereal's
 # compiled msgq.ipc_pyx Cython extension (built via `scons`, not by this
 # script). Bare CI runners without a scons build step can't pass that step;
 # ruff + shebang checks below don't need it. Local/full dev environments
@@ -65,10 +65,11 @@ if [ "$FULL" -eq 1 ]; then
 fi
 
 if [ "$NO_PYTEST" -eq 1 ]; then
-  echo "==> Skipping RK3588 host-side tests (--no-pytest)"
+  echo "==> Skipping host-side hardware tests (--no-pytest)"
 else
-  echo "==> Running RK3588 host-side tests"
+  echo "==> Running host-side hardware tests"
   python3 -m pytest \
+    system/hardware/tests \
     system/hardware/rk3588/tests/test_rk3588.py \
     system/hardware/rockchip/tests/test_rockchip.py \
     -v

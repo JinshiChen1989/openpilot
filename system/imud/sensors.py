@@ -17,13 +17,12 @@ import time
 
 from cereal import log
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware import HARDWARE
 
 
-try:
-  from hal.platform.rk3588_sensors import ICM42670 as _ICM42670, LIS2MDL as _LIS2MDL
-except ImportError:
-  _ICM42670 = {}  # type: ignore[assignment]
-  _LIS2MDL = {}   # type: ignore[assignment]
+_hal_sensors = HARDWARE.hal_module("sensors")
+_ICM42670 = getattr(_hal_sensors, "ICM42670", {})
+_LIS2MDL = getattr(_hal_sensors, "LIS2MDL", {})
 
 
 def _open_smbus(bus: int):

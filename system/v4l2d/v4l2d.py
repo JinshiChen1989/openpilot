@@ -30,11 +30,9 @@ _params = Params()
 
 from openpilot.system.v4l2d.occlusion_detector import OcclusionDetector, OcclusionROI
 
-# MIPI CSI device-path candidates live in the closed HAL package.
-try:
-  from hal.platform.rk3588_camera_paths import DEFAULT_MIPI_CAMERA_PATHS as _HAL_MIPI_PATHS
-except ImportError:
-  _HAL_MIPI_PATHS = {}  # type: ignore[assignment]
+# MIPI CSI device-path candidates live in the closed HAL package, per board.
+_HAL_MIPI_PATHS = getattr(
+  HARDWARE.hal_module("camera_paths"), "DEFAULT_MIPI_CAMERA_PATHS", {})
 
 
 def _mipi_paths(camera: str, fallback: list[str]) -> list[str]:

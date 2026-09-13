@@ -36,12 +36,13 @@ import cereal.messaging as messaging
 from openpilot.common.realtime import DT_MDL, Priority, Ratekeeper, config_realtime_process
 from openpilot.common.core_config import set_daemon_affinity
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware import HARDWARE
 
 try:
     from hal.drivers.radar import Radar3D, Radar3DConfig
-    from hal.platform.rk3588_pins import UART as RK3588_UART
+    _BOARD_UART = HARDWARE.hal_module("pins").UART
     HAL_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     HAL_AVAILABLE = False
 
 FRAME_RATE_HZ = 20
@@ -106,7 +107,7 @@ class Radar3DD:
             )
             return
 
-        uart = RK3588_UART["RADAR3D"]
+        uart = _BOARD_UART["RADAR3D"]
         config = Radar3DConfig(port=uart["device"], baud=uart["baud"], timeout_s=UART_TIMEOUT_S)
         self.radar = Radar3D(config)
         try:

@@ -16,7 +16,7 @@ from cereal import messaging
 from openpilot.common.time_helpers import system_time_valid
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
-from openpilot.system.hardware import HARDWARE, RK3588
+from openpilot.system.hardware import HARDWARE, ROCKCHIP
 
 # Low-level u-blox driver is board-support code in ExoPilot HAL.
 try:
@@ -48,8 +48,12 @@ class PigeonD:
         self.running = False
 
     def run(self) -> None:
-        if not RK3588:
-            cloudlog.warning("PigeonD: non-RK3588 platform, exiting")
+        # Gate on "is this a Rockchip board", not on one board's name: the
+        # GPS is the same u-blox part on every ExoPilot board, and naming a
+        # board here made this daemon fail to import on a branch that does
+        # not carry that board.
+        if not ROCKCHIP:
+            cloudlog.warning("PigeonD: not a Rockchip platform, exiting")
             return
 
         if not _hal_available():

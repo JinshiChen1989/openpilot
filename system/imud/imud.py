@@ -25,10 +25,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.imud.iio_imu import IIOImu
 
-try:
-    from hal.platform.rk3588_sensors import LSM6DS3 as _LSM6DS3
-except ImportError:
-    _LSM6DS3 = {}  # type: ignore[assignment]
+_LSM6DS3 = getattr(HARDWARE.hal_module("sensors"), "LSM6DS3", {})
 
 
 class ImuSensor:

@@ -9,7 +9,11 @@ libs = [common, messaging, visionipc,
 # on RK3588 hardware (see encoderd.cc). Source kept for reference.
 src = ['logger.cc', 'zstd_writer.cc', 'video_writer.cc', 'encoder/encoder.cc', 'encoder/jpeg_encoder.cc', 'encoder/ffmpeg_encoder.cc']
 
-if arch == "aarch64" and soc == "rk3588":
+# Every Rockchip board in this tree has MPP, so this follows "a supported
+# SoC was detected" rather than one board's name -- gating on the name
+# silently dropped hardware encoding on the other board. Must stay in step
+# with -DROCKCHIP_MPP in SConstruct, which is what encoderd.cc tests.
+if arch == "aarch64" and soc:
   src += ['encoder/mpp_encoder.cc']
   libs += ['rockchip_mpp', 'rga']
 
