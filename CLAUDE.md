@@ -88,6 +88,23 @@ dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 /
   board shares, and each board class is a sibling on top of it —
   `RK3576Hardware` used to subclass `RK3588Hardware`, which made 01M's class
   load-bearing for 02M and the two inseparable. Do not reintroduce that.
+- **Three lists name the board a branch builds for.** A rebase from EOP10
+  brings EOP10's values with it, so re-point them on every rebase:
+
+  | file | list | EOP10 / 01M | 02M |
+  |------|------|-------------|-----|
+  | `SConstruct` | `ROCKCHIP_SOCS` | `rk3588` | `rk3576` |
+  | `system/hardware/rk_device_id.py` | `SUPPORTED_SOCS` | `rk3588` | `rk3576` |
+  | `tools/convert_models_to_rknn.py` | `RKNN_TARGETS` | `rk3588` | `rk3576` |
+
+  Everything else derives from the board that is running, and **no daemon may
+  spell a board name**. Board data comes from
+  `HARDWARE.hal_module("<kind>")`, which resolves
+  `hal.platform.<board>_<kind>` via the board's `HAL_PREFIX`; RKNN artifact
+  paths come from `rknn_soc_tag()`, because an RKNN binary is valid for
+  exactly one SoC. Hardcoding `rk3588` is what made `pigeond` fail to import
+  on 02M and silently dropped the MPP hardware encoder from its build.
+
 - **A fix that is not about the UI belongs here**, so both branches inherit
   it. Daemons, cereal, params_keys.h, systemd units, SConstruct outside the
   Qt block. Fixing it on 01M or 02M instead leaves the other branch broken.
