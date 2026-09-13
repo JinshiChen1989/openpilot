@@ -140,7 +140,11 @@ def main(argv: list[str] | None = None) -> int:
   window.addWidget(view)
   if offroad is not None:
     window.addWidget(offroad)
-  window.resize(PANEL_W, PANEL_H)
+  # Fixed, not resize(): every coordinate in the onroad view is absolute
+  # against PANEL_W x PANEL_H, so a window the WM can reshape draws wrong
+  # rather than adapting. 1600x600 is the only size this branch renders at,
+  # as 1024x600 is the only one 01M and EOP10 render at.
+  window.setFixedSize(PANEL_W, PANEL_H)
   window.show()
 
   if args.demo:

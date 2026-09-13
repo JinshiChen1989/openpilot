@@ -124,15 +124,16 @@ dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 /
   it. Daemons, cereal, params_keys.h, systemd units, SConstruct outside the
   Qt block. Fixing it on 01M or 02M instead leaves the other branch broken.
 - **UI fixes belong on the branch they apply to.** `selfdrive/ui/` is
-  this branch's and 01M's; the C++ UI is EOP10's. `views/` and `main.py` are
-  the intended divergence between 01M and 02M; every other file that exists
-  on both (`qt.py`, `state.py`, `components/`, `settings/`, `styles/`,
-  `views/panels/`) is kept **byte-identical**, so a fix cherry-picks between
-  them unchanged. Check that before editing one of those files. Four
-  `components/` files exist only here — `chrome.py`, `panels.py`,
-  `panel_widgets.py`, `factory.py` — because they *are* the 02M design (the
-  50px chrome bands and the swipeable side panels); 01M's classic layout has
-  no counterpart to port them to.
+  this branch's and 01M's; the C++ UI is EOP10's.
+- **`views/` and `main.py` are the intended divergence** between 01M and 02M.
+  Within `components/` each branch also owns the files that *are* its layout:
+  `chrome.py`, `panels.py`, `panel_widgets.py` and `factory.py` exist only
+  here; `alerts.py`, `hud.py` and `theme.py` only on 01M. Every file that
+  exists on **both** branches — `qt.py`, `state.py`, the common
+  `components/`, `settings/`, `styles/`, `views/panels/` — is kept
+  **byte-identical**, so a fix cherry-picks between them unchanged. Check
+  that before editing one of those files, and check it both ways: a
+  one-directional diff misses a file that exists only on the other branch.
 
 ### Rebasing the UI branches onto an improved EOP10
 
@@ -167,13 +168,15 @@ Python and run as a `PythonProcess`, and `dev/01M` uses the same module.
 
 - **This branch carries the new design**: top-tab settings, swipeable side
   panels, 1600x600 chrome. `dev/01M` keeps the classic openpilot layout.
-- **The split between the branches is `views/` and `main.py`.** Everything
-  else that exists on both — `qt.py`, `state.py`, `components/`, `settings/`,
-  `styles/`, `views/panels/` — is byte-identical, so a fix to any of them
-  cherry-picks between branches unchanged. Check that before editing one.
-  `components/chrome.py`, `panels.py`, `panel_widgets.py` and `factory.py`
-  are 02M-only: they implement the chrome bands and swipeable side panels
-  that are this branch's design, so 01M has nothing to keep in sync.
+- **`views/` and `main.py` are the intended divergence** between 01M and 02M.
+  Within `components/` each branch also owns the files that *are* its layout:
+  `chrome.py`, `panels.py`, `panel_widgets.py` and `factory.py` exist only
+  here; `alerts.py`, `hud.py` and `theme.py` only on 01M. Every file that
+  exists on **both** branches — `qt.py`, `state.py`, the common
+  `components/`, `settings/`, `styles/`, `views/panels/` — is kept
+  **byte-identical**, so a fix cherry-picks between them unchanged. Check
+  that before editing one of those files, and check it both ways: a
+  one-directional diff misses a file that exists only on the other branch.
 - **Binding**: **PyQt5 only**. There is no PySide fallback — carrying one
   meant checking every spelling against two bindings, and it leaked anyway
   (scoped vs unscoped QDBus enums, QSpinBox float coercion). Import Qt names
