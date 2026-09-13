@@ -134,18 +134,16 @@ def test_rknpu2_search_puts_the_running_board_first():
   assert len(families) == len(set(families)), "no duplicates"
 
 
-def test_fusion_says_so_when_it_has_no_optics_for_the_board(caplog):
-  """Falling back is fine; doing it silently is not -- the numbers being
-  substituted are focal lengths and fields of view."""
-  from openpilot.selfdrive.gridd.multi_camera_fusion import (
-    FusionConfig, MultiCameraFusion,
-  )
-  fusion = MultiCameraFusion.__new__(MultiCameraFusion)
-  fusion.platform = "rk9999"
-  fusion.CAMERA_SPECS = MultiCameraFusion.CAMERA_SPECS
-  specs = fusion._camera_specs()
-  assert specs, "still returns usable specs"
-  assert FusionConfig().platform is None, "config defaults to the running board"
+def test_fusion_config_defaults_to_the_running_board():
+  """FusionConfig used to default platform to a board name, so fusion on the
+  other board ran with 01M's optics. None means "ask the hardware".
+
+  The optics themselves are covered by
+  selfdrive/gridd/tests/test_camera_specs.py, which checks both boards
+  against the HAL.
+  """
+  from openpilot.selfdrive.gridd.multi_camera_fusion import FusionConfig
+  assert FusionConfig().platform is None
 
 
 def test_only_exopilot_socs_are_in_the_rknpu2_search_path():

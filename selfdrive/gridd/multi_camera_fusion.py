@@ -124,6 +124,87 @@ class FusionConfig:
     platform: str | None = None
 
 
+# Which HAL camera fills each role, per board. The HAL describes cameras by
+# name and this enum describes them by job, so the two need joining somewhere
+# -- and the names genuinely differ: 01M's road camera is "road", 02M's is
+# "mono_narrow". 02M's mono_tele has no role here; the fusion takes four
+# inputs and the tele camera is not one of them.
+HAL_NAME_BY_ROLE = {
+    'rk3588': {
+        CameraRole.WIDE_ROAD: 'wide_road',
+        CameraRole.ROAD: 'road',
+        CameraRole.STEREO_LEFT: 'stereo_left',
+        CameraRole.STEREO_RIGHT: 'stereo_right',
+    },
+    'rk3576': {
+        CameraRole.WIDE_ROAD: 'mono_wide',
+        CameraRole.ROAD: 'mono_narrow',
+        CameraRole.STEREO_LEFT: 'stereo_left',
+        CameraRole.STEREO_RIGHT: 'stereo_right',
+    },
+}
+
+# Fusion range policy per role, in metres. Not board data -- how far a given
+# role is trusted is a tuning decision, and it is the same decision for the
+# equivalent camera on either board. Optics come from the HAL instead.
+ROLE_RANGE_M = {
+    CameraRole.WIDE_ROAD: (0.0, 30.0),
+    CameraRole.ROAD: (0.0, 80.0),
+    CameraRole.STEREO_LEFT: (0.0, 50.0),
+    CameraRole.STEREO_RIGHT: (0.0, 50.0),
+}
+
+# Last-resort optics, used only when no geometry source is available (dev PC,
+# CI). These were the in-repo numbers for 01M and had drifted from the board:
+# the HAL gives road 40 deg at 1920x1280, not 60 deg at 1920x1080. Corrected
+# here so the fallback at least matches the hardware, but the HAL is the
+# source of truth.
+FALLBACK_OPTICS = {
+    CameraRole.WIDE_ROAD: {'focal_mm': 1.7, 'fov': 119.0, 'width': 1920, 'height': 1280},
+    CameraRole.ROAD: {'focal_mm': 8.0, 'fov': 40.0, 'width': 1920, 'height': 1280},
+    CameraRole.STEREO_LEFT: {'focal_mm': 3.6, 'fov': 71.0, 'width': 2560, 'height': 1440},
+    CameraRole.STEREO_RIGHT: {'focal_mm': 3.6, 'fov': 71.0, 'width': 2560, 'height': 1440},
+}
+
+
+def build_camera_specs(platform: str, geometry) -> dict[CameraRole, dict]:
+    """Per-role optics for a board, from a HAL camera-geometry module.
+
+    Pure: everything it needs is an argument, so it is callable with a real
+    HAL module, a stand-in, or None without touching global hardware state.
+    `geometry` is whatever HARDWARE.hal_module("camera_geometry") returns --
+    an object exposing LENS_MM / FOV_DEG / IMAGE_SIZE_PX keyed by camera
+    name -- or None when the HAL is not installed.
+
+    This replaced a hardcoded table keyed by board name with exactly one
+    board in it, so the other board silently borrowed 01M's focal lengths
+    and fields of view.
+    """
+    names = HAL_NAME_BY_ROLE.get(platform)
+    if geometry is None or names is None:
+        cloudlog.warning(
+            "camera specs: no HAL camera geometry for '%s'; using fallback "
+            "optics. Fields of view and resolutions are approximate.", platform)
+        return {role: {**optics, 'min_m': ROLE_RANGE_M[role][0],
+                       'max_m': ROLE_RANGE_M[role][1]}
+                for role, optics in FALLBACK_OPTICS.items()}
+
+    specs = {}
+    for role, name in names.items():
+        if name not in geometry.LENS_MM:
+            cloudlog.error(
+                "camera specs: HAL has no camera '%s' for role %s on '%s' -- "
+                "dropping that input rather than guessing.", name, role, platform)
+            continue
+        width, height = geometry.IMAGE_SIZE_PX[name]
+        min_m, max_m = ROLE_RANGE_M[role]
+        specs[role] = {
+            'focal_mm': geometry.LENS_MM[name], 'fov': float(geometry.FOV_DEG[name]),
+            'min_m': min_m, 'max_m': max_m, 'width': width, 'height': height,
+        }
+    return specs
+
+
 class MultiCameraFusion:
     """Fuses multiple camera inputs for unified perception.
 
@@ -132,38 +213,26 @@ class MultiCameraFusion:
     """
 
     # Camera specifications by platform
-    CAMERA_SPECS = {
-        'rk3588': {
-            CameraRole.WIDE_ROAD: {
-                'focal_mm': 1.7, 'fov': 120.0, 'min_m': 0.0, 'max_m': 30.0,
-                'width': 1920, 'height': 1080
-            },
-            CameraRole.ROAD: {
-                'focal_mm': 8.0, 'fov': 60.0, 'min_m': 0.0, 'max_m': 80.0,
-                'width': 1920, 'height': 1080
-            },
-            CameraRole.STEREO_LEFT: {
-                'focal_mm': 3.6, 'fov': 100.0, 'min_m': 0.0, 'max_m': 50.0,
-                'width': 2560, 'height': 1440
-            },
-            CameraRole.STEREO_RIGHT: {
-                'focal_mm': 3.6, 'fov': 100.0, 'min_m': 0.0, 'max_m': 50.0,
-                'width': 2560, 'height': 1440
-            },
-        },
-    }
-
-    def __init__(self, config: FusionConfig | None = None):
+    def __init__(self, config: FusionConfig | None = None, camera_geometry=None):
         """Initialize multi-camera fusion.
 
         Args:
-            config: Fusion configuration. If None, defaults are used and the board is detected.
+            config: Fusion configuration. If None, defaults are used and the
+                board is detected.
+            camera_geometry: HAL camera-geometry module to read optics from.
+                Defaults to the running board's. Passing one explicitly is
+                how a caller -- or a test -- supplies a different board's
+                geometry without reaching into global hardware state.
         """
         if config is None:
             config = FusionConfig()
 
         self.config = config
         self.platform = config.platform or HARDWARE.get_device_type()
+        if camera_geometry is None:
+            camera_geometry = HARDWARE.hal_module("camera_geometry")
+        # Resolved once: reading the HAL is not something to do per frame.
+        self._specs = build_camera_specs(self.platform, camera_geometry)
 
         # Camera geometry
         self.geometry = CameraArrayGeometry.for_platform(self.platform)
@@ -189,29 +258,9 @@ class MultiCameraFusion:
         cloudlog.info(f"MultiCameraFusion initialized for {self.platform}")
         cloudlog.info(f"Supported cameras: {self._get_supported_cameras()}")
 
-    def _camera_specs(self) -> dict:
-        """Optics for the running board.
-
-        A board with no entry used to fall through to RK3588's silently, so
-        fusion ran with another board's focal lengths and fields of view --
-        wrong numbers, no indication anything was off. It still falls back,
-        because refusing to fuse is worse than fusing imprecisely, but it
-        says so now.
-        """
-        specs = self.CAMERA_SPECS.get(self.platform)
-        if specs is None:
-            fallback = next(iter(self.CAMERA_SPECS))
-            cloudlog.error(
-                "MultiCameraFusion: no camera optics described for '%s'; "
-                "using '%s' as a stand-in. Ranges and fields of view will be "
-                "wrong until this board's specs are added.",
-                self.platform, fallback)
-            specs = self.CAMERA_SPECS[fallback]
-        return specs
-
     def _get_supported_cameras(self) -> list[CameraRole]:
-        """Get list of cameras supported by current platform."""
-        return list(self._camera_specs().keys())
+        """Roles this board actually has cameras for."""
+        return list(self._specs.keys())
 
     def _init_range_weights(self):
         """Initialize range-aware weight maps."""
@@ -271,8 +320,7 @@ class MultiCameraFusion:
             cloudlog.debug(f"Camera {camera_name} not supported on {self.platform}")
             return
 
-        # Get specs
-        specs = self.CAMERA_SPECS[self.platform][role]
+        specs = self._specs[role]
 
         self._frames[role] = CameraFrame(
             role=role,
@@ -424,7 +472,7 @@ class MultiCameraFusion:
 
     def get_camera_status(self) -> dict:
         """Get status of all cameras."""
-        specs = self.CAMERA_SPECS.get(self.platform, self.CAMERA_SPECS['rk3588'])
+        specs = self._specs
 
         has_stereo = (CameraRole.STEREO_LEFT in self._frames and
                      CameraRole.STEREO_RIGHT in self._frames)

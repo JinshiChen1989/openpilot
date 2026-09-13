@@ -80,7 +80,7 @@ class RockchipHardware(HardwareBase):
     # ---- board data from the closed hal package --------------------------
 
     @classmethod
-    def hal_module(cls, suffix: str):
+    def hal_module(cls, suffix: str, *, import_module=importlib.import_module):
         """Import `hal.platform.<HAL_PREFIX>_<suffix>` for the running board.
 
         See HardwareBase.hal_module for why daemons go through this instead
@@ -88,12 +88,16 @@ class RockchipHardware(HardwareBase):
         installed, when the board has no HAL_PREFIX, or when this board has
         no module of that kind -- all of which are ordinary states that the
         caller handles with its in-repo defaults.
+
+        `import_module` is the importer to resolve through. It exists so a
+        caller can supply a different one -- a test hands in a stub rather
+        than editing sys.modules, which leaks into every test that runs
+        after it.
         """
         if not cls.HAL_PREFIX:
             return None
         try:
-            return importlib.import_module(
-                f"hal.platform.{cls.HAL_PREFIX}_{suffix}")
+            return import_module(f"hal.platform.{cls.HAL_PREFIX}_{suffix}")
         except ImportError:
             return None
 

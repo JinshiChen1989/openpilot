@@ -71,6 +71,7 @@ else
   python3 -m pytest \
     system/hardware/tests \
     system/v4l2d/tests \
+    selfdrive/gridd/tests/test_camera_specs.py \
     system/hardware/rk3588/tests/test_rk3588.py \
     system/hardware/rockchip/tests/test_rockchip.py \
     -v

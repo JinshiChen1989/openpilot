@@ -140,7 +140,7 @@ class HardwareBase(ABC):
 
 
     @classmethod
-    def hal_module(cls, suffix: str):
+    def hal_module(cls, suffix: str, *, import_module=None):
         """Import this board's `hal.platform.<board>_<suffix>` module.
 
         Board bring-up data (pins, thermal bands, camera paths and geometry)
