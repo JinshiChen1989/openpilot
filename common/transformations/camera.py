@@ -64,7 +64,6 @@ _eop_ox03c10_config = DeviceCameraConfig(
   CameraConfig(1920, 1280, 567.0),    # wide_road: 1.7mm lens, ~118deg HFOV
 )
 
-
 def _load_eop_config(platform: str, road_cam: str, wide_cam: str, fallback: DeviceCameraConfig) -> DeviceCameraConfig:
   """Load camera geometry for an ExoPilot Rockchip platform from exopilot HAL.
 
@@ -88,7 +87,6 @@ def _load_eop_config(platform: str, road_cam: str, wide_cam: str, fallback: Devi
     # HAL not installed or geometry incomplete — use the public fallback.
     return fallback
 
-
 def _load_eop_rk3588_config(sensor: str = "ox03c10") -> DeviceCameraConfig:
   """Load RK3588 camera geometry; fall back to public defaults.
 
@@ -96,22 +94,6 @@ def _load_eop_rk3588_config(sensor: str = "ox03c10") -> DeviceCameraConfig:
   The native readout is 1920x1280, close to the reference's 1928x1208.
   """
   return _load_eop_config("rk3588", "road", "wide_road", _eop_ox03c10_config)
-
-
-def _load_eop_rk3576_config(sensor: str = "ox03c10") -> DeviceCameraConfig:
-  """Load RK3576 (ExoPilot 02M) camera geometry; fall back to public defaults.
-
-  mono_narrow/mono_wide use the identical lens specs as RK3588's road/
-  wide_road (8.0mm/1.7mm, same OX03C10 sensor) -- confirmed against
-  hal.platform.rk3576_camera_geometry.py directly, not assumed. 02M's third
-  road-facing camera, mono_tele (16.0mm), has no fcam/dcam/ecam slot in this
-  3-camera model and isn't wired to anything yet -- camera *capture* for
-  RK3576 doesn't exist yet either (see docs/eop/RK3576_02M_SUPPORT.md's
-  Phase B), so this only matters once that's built, at which point
-  mono_tele's model-input role is an open design question, not a bug here.
-  """
-  return _load_eop_config("rk3576", "mono_narrow", "mono_wide", _eop_ox03c10_config)
-
 
 DEVICE_CAMERAS = {
   # A "device camera" is defined by a device type and sensor
@@ -134,16 +116,6 @@ DEVICE_CAMERAS = {
   ("rk3588", "ox03c10"): _load_eop_rk3588_config("ox03c10"),
   ("rk3588", "gc4653"): _load_eop_rk3588_config("gc4653"),
   ("rk3588", "unknown"): _load_eop_rk3588_config("ox03c10"),
-
-  # ExoPilot 02M (RK3576) - mono_narrow/mono_wide are OX03C10, stereo is
-  # GC4653, mono_tele has no slot yet (see _load_eop_rk3576_config). Without
-  # these entries, a lookup for ("rk3576", ...) would miss this dict
-  # entirely and fall back to stock comma-3's _ar_ox_config (wrong
-  # resolution and focal length, not just "less precise than RK3588's") --
-  # added 2026-08-26 during the dual-platform audit.
-  ("rk3576", "ox03c10"): _load_eop_rk3576_config("ox03c10"),
-  ("rk3576", "gc4653"): _load_eop_rk3576_config("gc4653"),
-  ("rk3576", "unknown"): _load_eop_rk3576_config("ox03c10"),
 }
 prods = itertools.product(('tici', 'tizi', 'mici'), (('ar0231', _ar_ox_config), ('ox03c10', _ar_ox_config), ('os04c10', _os_config)))
 DEVICE_CAMERAS.update({(d, c[0]): c[1] for d, c in prods})
@@ -163,7 +135,7 @@ def get_device_camera_config(camera_type: str = "ox03c10") -> DeviceCameraConfig
   # Comment corrected 2026-08-26: this actually falls back to stock comma-3's
   # _ar_ox_config (not an rk3588 config, despite what this comment used to
   # say) if (device_type, camera_type) isn't in DEVICE_CAMERAS -- e.g. an
-  # unregistered platform. Both rk3588 and rk3576 are registered above, so
+  # unregistered platform. rk3588 is registered above, so
   # this fallback should not be hit for either in practice.
   return DEVICE_CAMERAS.get((device_type, camera_type), _ar_ox_config)
 
@@ -176,7 +148,6 @@ device_frame_from_view_frame = np.array([
 ])
 view_frame_from_device_frame = device_frame_from_view_frame.T
 
-
 # aka 'extrinsic_matrix'
 # road : x->forward, y -> left, z->up
 def get_view_frame_from_road_frame(roll, pitch, yaw, height):
@@ -184,14 +155,11 @@ def get_view_frame_from_road_frame(roll, pitch, yaw, height):
   view_from_road = view_frame_from_device_frame.dot(device_from_road)
   return np.hstack((view_from_road, [[0], [height], [0]]))
 
-
-
 # aka 'extrinsic_matrix'
 def get_view_frame_from_calib_frame(roll, pitch, yaw, height):
   device_from_calib= orient.rot_from_euler([roll, pitch, yaw])
   view_from_calib = view_frame_from_device_frame.dot(device_from_calib)
   return np.hstack((view_from_calib, [[0], [height], [0]]))
-
 
 def vp_from_ke(m):
   """
@@ -202,12 +170,10 @@ def vp_from_ke(m):
   """
   return (m[0, 0]/m[2, 0], m[1, 0]/m[2, 0])
 
-
 def roll_from_ke(m):
   # note: different from calibration.h/RollAnglefromKE: i think that one's just wrong
   return np.arctan2(-(m[1, 0] - m[1, 1] * m[2, 0] / m[2, 1]),
                     -(m[0, 0] - m[0, 1] * m[2, 0] / m[2, 1]))
-
 
 def normalize(img_pts, intrinsics):
   # normalizes image coordinates
@@ -220,7 +186,6 @@ def normalize(img_pts, intrinsics):
   img_pts_normalized = img_pts.dot(intrinsics_inv.T)
   img_pts_normalized[(img_pts < 0).any(axis=1)] = np.nan
   return img_pts_normalized[:, :2].reshape(input_shape)
-
 
 def denormalize(img_pts, intrinsics, width=np.inf, height=np.inf):
   # denormalizes image coordinates
@@ -238,14 +203,12 @@ def denormalize(img_pts, intrinsics, width=np.inf, height=np.inf):
     img_pts_denormalized[img_pts_denormalized[:, 1] < 0] = np.nan
   return img_pts_denormalized[:, :2].reshape(input_shape)
 
-
 def get_calib_from_vp(vp, intrinsics):
   vp_norm = normalize(vp, intrinsics)
   yaw_calib = np.arctan(vp_norm[0])
   pitch_calib = -np.arctan(vp_norm[1]*np.cos(yaw_calib))
   roll_calib = 0
   return roll_calib, pitch_calib, yaw_calib
-
 
 def device_from_ecef(pos_ecef, orientation_ecef, pt_ecef):
   # device from ecef frame
@@ -258,7 +221,6 @@ def device_from_ecef(pos_ecef, orientation_ecef, pt_ecef):
   pt_ecef_rel = pt_ecef - pos_ecef
   pt_device = np.einsum('jk,ik->ij', device_from_ecef_rot, pt_ecef_rel)
   return pt_device.reshape(input_shape)
-
 
 def img_from_device(pt_device):
   # img coordinates from pts in device frame

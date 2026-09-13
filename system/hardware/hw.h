@@ -32,26 +32,23 @@ public:
   // Check if running on RK3588 (ExoPilot 01M)
   static bool RK3588() { return matchesPlatform("rk3588"); }
 
-  // Check if running on RK3576 (ExoPilot 02M). Mirrors
-  // system/hardware/registry.py's PlatformRegistry.detect(), which already
-  // aliases 'rk3576' to 'exopilot02m' on the Python side -- this brings the
-  // C++ side (previously RK3588-only) in line with it.
-  static bool RK3576() { return matchesPlatform("rk3576"); }
-
-  // Generic Rockchip detection
+  // Generic Rockchip detection. This branch supports 01M hardware only, so
+  // RK3588 is the only Rockchip board -- RK3576 (ExoPilot 02M) lives on
+  // dev/02M, see the branch model in CLAUDE.md. Kept as a separate predicate
+  // rather than folded into RK3588() because callers asking "is this a
+  // Rockchip board" should not have to be edited when a board is added.
   static bool ROCKCHIP() {
-    return RK3588() || RK3576();
+    return RK3588();
   }
 
   // Device name for logging
   static std::string get_name() {
     if (RK3588()) return "rk3588";
-    if (RK3576()) return "rk3576";
     return "pc";
   }
 
   static cereal::InitData::DeviceType get_device_type() {
-    if (RK3588() || RK3576()) return cereal::InitData::DeviceType::TICI;
+    if (ROCKCHIP()) return cereal::InitData::DeviceType::TICI;
     return cereal::InitData::DeviceType::PC;
   }
 
@@ -95,7 +92,7 @@ public:
   }
 
  private:
-  // Shared by RK3588()/RK3576(): an EOP_PLATFORM env var override (for
+  // Used by RK3588(): an EOP_PLATFORM env var override (for
   // testing) checked first, then a substring match against the device
   // tree's compatible string, read from disk once and cached -- the
   // physical SoC can't change at runtime, so re-reading it on every call

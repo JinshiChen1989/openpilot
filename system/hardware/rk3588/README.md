@@ -7,7 +7,7 @@ This directory contains the hardware abstraction, camera configuration, and targ
 | Feature | RK3588 (ExoPilot 01M) |
 |---------|----------------------|
 | SoC | Rockchip RK3588 (cost-optimized RK3588, quad A76 + quad A55) |
-| NPU | RKNPU2 (6 TOPS, RK3576-compatible runtime) |
+| NPU | RKNPU2 (6 TOPS) |
 | RGA | Rockchip RGA 2D accelerator |
 | MPP | Rockchip Media Process Platform |
 | GPU | Mali-G610 MC4 (OpenGL ES 3.2, Vulkan 1.2) |

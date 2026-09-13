@@ -232,17 +232,15 @@ class SpeedLimitConfirmation:
 def detect_exopilot_platform() -> str:
   """Detect ExoPilot platform based on hardware device tree.
 
-  Returns 'exopilot01m' for RK3588 or 'exopilot02m' for RK3576 — both are
-  openpilot-supported platforms as of 2026-08-26 (see
-  docs/eop/RK3576_02M_SUPPORT.md), not just data-provenance tags for a
-  VisionPilot-only board. Data merges across the whole ExoPilot fleet
-  (including VisionPilot, also on 02M) still rely on this tag being
-  accurate for both platforms, same as before.
+  Returns 'exopilot01m' for RK3588. This branch supports 01M hardware only --
+  RK3576 (ExoPilot 02M) lives on dev/02M, see the branch model in CLAUDE.md.
+
+  This is a real platform identity, not just a data-provenance tag: data
+  merges across the ExoPilot fleet rely on it being accurate.
 
   Supports the HARDWARE environment variable override for testing, matching
-  system/hardware/registry.py's PlatformRegistry.detect() convention —
-  added 2026-08-26, this function previously had no test-friendly way to
-  exercise the rk3576 branch without a real device tree.
+  system/hardware/registry.py's PlatformRegistry.detect() convention, so
+  platform detection can be exercised without a real device tree.
 
   EOP-CLEANUP: Extracted from cslb.py and surface_quality_db.py which had
   nearly identical copies of this function.
@@ -250,16 +248,12 @@ def detect_exopilot_platform() -> str:
   env_platform = os.environ.get('HARDWARE', '').lower()
   if 'rk3588' in env_platform:
     return 'exopilot01m'
-  if 'rk3576' in env_platform:
-    return 'exopilot02m'
 
   try:
     with open('/proc/device-tree/compatible') as f:
       compatible = f.read()
       if 'rk3588' in compatible:
         return 'exopilot01m'
-      elif 'rk3576' in compatible:
-        return 'exopilot02m'
   except Exception:
     pass
 

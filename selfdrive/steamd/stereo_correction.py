@@ -1,9 +1,8 @@
 """
 Stereo Correction — Wide-Baseline to Human-IPD Adaptation
 
-ExoPilot 01M (RK3588) has an 80 mm stereo baseline.
-ExoPilot 02M (RK3576) has a 160 mm stereo baseline.
-Both are wider than the average human interpupillary distance (~63 mm).
+ExoPilot 01M (RK3588) has an 80 mm stereo baseline, wider than the average
+human interpupillary distance (~63 mm).
 Viewing raw rectified stereo in a headset causes:
   • Excessive near-field disparity → eye divergence, nausea
   • Wrong scale perception → objects appear miniature or giant
@@ -24,7 +23,6 @@ Usage:
 References:
   - OpenCV stereoRectify docs: https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html
   - ExoPilot 01M config: system/hardware/rk3588/camera_config.py  (80 mm)
-  - ExoPilot 02M config: visionpilot's own camera config (160 mm)
 """
 
 from __future__ import annotations

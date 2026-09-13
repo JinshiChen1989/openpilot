@@ -662,19 +662,18 @@ def main() -> int:
 
   # This daemon's camera list (_default_camera_configs) hardcodes ExoPilot
   # 01M's 4-camera MIPI array and device-path candidates
-  # (hal.platform.rk3588_camera_paths). On any other platform -- notably
-  # RK3576/ExoPilot 02M, which has a different 5-camera array and no
-  # equivalent hal.platform.rk3576_camera_paths module yet -- silently
-  # proceeding would open whatever /dev/videoN nodes happen to exist and
-  # mislabel them as road/wide_road/stereo_left/stereo_right, publishing
-  # wrong camera identities on the VisionIPC bus rather than failing
-  # visibly. Refuse to guess; see docs/eop/RK3576_02M_SUPPORT.md's Phase B
-  # for what porting real 02M camera support requires.
+  # (hal.platform.rk3588_camera_paths), which is the only hardware this
+  # branch supports. On any other board, silently proceeding would open
+  # whatever /dev/videoN nodes happen to exist and mislabel them as
+  # road/wide_road/stereo_left/stereo_right, publishing wrong camera
+  # identities on the VisionIPC bus rather than failing visibly. Refuse to
+  # guess. The check stays a whitelist rather than a blacklist so a board
+  # added later has to opt in deliberately.
   if device_type not in (None, 'pc', 'rk3588'):
     cloudlog.error(
       "v4l2d: platform '%s' is not supported by this daemon's hardcoded "
       + "ExoPilot 01M camera array -- refusing to start rather than open the "
-      + "wrong devices. See docs/eop/RK3576_02M_SUPPORT.md.", device_type)
+      + "wrong devices.", device_type)
     return 1
 
   try:

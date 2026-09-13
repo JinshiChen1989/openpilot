@@ -1,6 +1,6 @@
 """Shared USB/UVC camera config types, used by every Rockchip platform's
 own `camera_config.py` (currently `rk3588/camera_config.py`,
-`rk3576/camera_config.py`) so the dataclass/enum shapes don't drift between
+per-board camera_config modules) so the dataclass/enum shapes don't drift between
 platforms — only each platform's `USB_CAMERAS` list (sourced from that
 platform's `hal.platform.<soc>_camera_geometry`) differs.
 """

@@ -7,12 +7,14 @@ Guidance for Claude Code when working on this openpilot fork.
 **ExoPilot (EOP)** — Advanced ADAS for Rockchip RK3588.
 
 - **Codebase**: OpenPilot fork + EOP-specific daemons, controllers, UI
-- **Platform**: RK3588 (ExoPilot 01L / 01M) and, as of 2026-08-26, RK3576
-  (ExoPilot 02M) — both openpilot-supported; see
-  `docs/eop/RK3576_02M_SUPPORT.md` for what's actually implemented on 02M vs.
-  still pending real hardware. VisionPilot (ROS2) also targets 02M
-  separately — the two are additional to each other, not exclusive; see that
-  doc for why. ExoRobot 01H (RK3588 16GB, HumRobot) is in `~/robot/exorobot`
+- **Platform**: **RK3588 only** (ExoPilot 01L / 01M). 02M/RK3576 lives on
+  `dev/02M` — see **Branch model** below. As of 2026-09-13 this branch carries
+  no RK3576 support at all: `system/hardware/rk3576/`, `PlatformType.RK3576`,
+  `Hardware::RK3576()`, the RK3576 camera/NPU entries and the 02M UI
+  (wide-screen telemetry panel, `EOPTelemetryPanelWidth`, the split
+  `MainWindow`) are gone, and `deviceScreenSize()` is a constant 1024x600.
+  Asking for `rk3576` now fails loudly rather than falling back. ExoRobot 01H
+  (RK3588 16GB, HumRobot) is in `~/robot/exorobot`
 - **Suffix = RAM**: L=4GB / M=8GB / H=16GB; PCIe accel (camera-tier Hailo-8/DX-M1 only) is a runtime-detected plug-in, works unchanged on either SoC
 - **Status**: In development — dev PC testing phase (not hardware-deployed)
 
@@ -21,14 +23,8 @@ Guidance for Claude Code when working on this openpilot fork.
 ExoPilot BSP must be installed first before openpilot:
 ```bash
 sudo ~/pilot/exopilot/scripts/install/setup_rk3588.sh && sudo reboot   # ExoPilot 01L/01M
-sudo ~/pilot/exopilot/scripts/install/setup_rk3576.sh && sudo reboot   # ExoPilot 02M
 ```
-`setup_rk3576.sh`'s own header says it prepares the hardware layer "so
-VisionPilot works correctly" — it predates openpilot's 02M support and was
-written with only that consumer in mind, but the setup itself (kernel USB
-hub driver, RTS5411S DT overlay, udev rules) is consumer-agnostic hardware
-bring-up, not VisionPilot-specific software. Not verified against real
-02M hardware from the openpilot side.
+The 02M equivalent (`setup_rk3576.sh`) belongs with `dev/02M`.
 
 ---
 
@@ -75,6 +71,47 @@ bring-up, not VisionPilot-specific software. Not verified against real
 | `system/bluetoothd/ble_gatt.py` | BLE GATT server (Nordic UART, iOS + Android) |
 | `system/bluetoothd/spp.py` | Classic SPP server (RFCOMM, OBD scanners) |
 | `selfdrive/adaptd/adaptd.py` | Adaptive driving daemon (renamed from elm327d) |
+
+## Branch model
+
+This is the **foundation** branch. It keeps the old C++/Qt UI and supports
+**ExoPilot 01M (RK3588) hardware only**. The two UI branches sit on top of it
+and take foundation improvements by **rebasing**, not by cherry-picking:
+
+```
+dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 / 1024x600
+            └── dev/02M   PyQt5 UI, nagasware layout,          RK3576 / 1600x600
+```
+
+- **Each branch carries one board.** EOP10 and 01M are RK3588-only; 02M is
+  RK3576-only. `system/hardware/rockchip_base.py` holds what any Rockchip
+  board shares, and each board class is a sibling on top of it —
+  `RK3576Hardware` used to subclass `RK3588Hardware`, which made 01M's class
+  load-bearing for 02M and the two inseparable. Do not reintroduce that.
+- **A fix that is not about the UI belongs here**, so both branches inherit
+  it. Daemons, cereal, params_keys.h, systemd units, SConstruct outside the
+  Qt block. Fixing it on 01M or 02M instead leaves the other branch broken.
+- **UI fixes belong on the branch they apply to.** The C++ UI is this
+  branch's; `selfdrive/ui/eop/` is theirs.
+
+### Rebasing the UI branches onto an improved EOP10
+
+```bash
+git fetch origin dev/EOP10
+git checkout dev/01M && git rebase origin/dev/EOP10
+git checkout dev/02M && git rebase origin/dev/EOP10
+```
+
+Both then need a force-with-lease push, since a rebase rewrites commits.
+
+**Expect modify/delete conflicts.** The UI branches delete the whole C++ UI
+tree, and 02M swaps the hardware layer. Any EOP10 commit touching a file a UI
+branch deleted conflicts on every rebase. The resolution is usually "the UI
+branch's deletion wins" — `git rm` and continue — but read the incoming
+change first: a *backend* fix that happens to live in a deleted file needs
+porting to the Python equivalent rather than dropping.
+
+After rebasing, re-run `./test.sh` on each branch.
 
 ## Daemon Naming
 
@@ -226,7 +263,7 @@ See `docs/eop/CODE_QUALITY_LINT_CLEANUP.md` for the full report and recommended 
 ---
 
 **Last updated**: 2026-08-16  
-**Branch**: EOP10
+**Branch**: dev/01M (renamed from dev/EOP10, 2026-09-10)
 
 ---
 

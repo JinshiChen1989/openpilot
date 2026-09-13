@@ -228,6 +228,11 @@ struct InitData {
     tizi @6;
     mici @7;
     rk3588 @8;
+    # Kept although this branch has no RK3576 support. capnp enumerants are
+    # append-only: removing one breaks every log that carries it and burns
+    # ordinal 9 forever. Leaving it also keeps the schema byte-identical
+    # across dev/EOP10, dev/01M and dev/02M, so logs stay interchangeable
+    # across the fleet.
     rk3576 @9;
   }
 
