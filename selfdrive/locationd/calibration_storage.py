@@ -52,6 +52,7 @@ from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 
 from openpilot.selfdrive.gridd.camera_geometry import CameraArrayGeometry, CameraIntrinsics
+from openpilot.system.hardware import HARDWARE
 
 @dataclass
 class SingleCameraCalibration:
@@ -117,7 +118,7 @@ class SingleCameraCalibration:
 @dataclass
 class MultiCameraCalibration:
     """Complete calibration for all cameras."""
-    platform: str = "rk3588"
+    platform: str = ""   # "" = fill in from the running board at save time
     reference_camera: str = "road"
     calibration_date: str = ""
     cameras: dict[str, SingleCameraCalibration] = field(default_factory=dict)
@@ -189,7 +190,7 @@ class CalibrationStorage:
             live_cal = msg.liveCalibration
 
             calib = MultiCameraCalibration(
-                platform="rk3588",  # Default
+                platform=HARDWARE.get_device_type(),
                 reference_camera="road",
                 calibration_date=""
             )
@@ -313,7 +314,7 @@ class CalibrationStorage:
         array_data = data['camera_array']
 
         calib = MultiCameraCalibration(
-            platform=array_data.get('platform', 'rk3588'),
+            platform=array_data.get('platform', HARDWARE.get_device_type()),
             reference_camera=array_data.get('reference_camera', 'road'),
             calibration_date=array_data.get('calibration_date', ''),
             stereo_baseline_mm=array_data.get('stereo_baseline_mm', 80.0)
@@ -602,7 +603,7 @@ def test_calibration_storage():
 
     # Create sample calibration
     calib = MultiCameraCalibration(
-        platform="rk3588",
+        platform=HARDWARE.get_device_type(),
         reference_camera="road",
         calibration_date="2026-03-24T12:00:00",
         stereo_baseline_mm=80.0

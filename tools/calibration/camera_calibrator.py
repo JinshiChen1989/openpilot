@@ -53,6 +53,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from openpilot.selfdrive.gridd.camera_geometry import (
     CameraArrayGeometry
 )
+from openpilot.system.hardware.rk_device_id import SUPPORTED_SOCS
 
 
 @dataclass
@@ -387,14 +388,14 @@ def calibrate_camera(
 def merge_calibrations(
     results: dict[str, CalibrationResult],
     output_path: Path,
-    platform: str = 'rk3588'
+    platform: str = SUPPORTED_SOCS[0]
 ):
     """Merge individual calibrations into unified config file.
 
     Args:
         results: Dict mapping camera_id to CalibrationResult
         output_path: Path to output YAML file
-        platform: 'rk3588'
+        platform: '<board>'
     """
     print(f"\nMerging calibrations into {output_path}...")
 
@@ -494,7 +495,7 @@ Examples:
   %(prog)s --video road.mp4 --camera road
 
   # Batch calibrate all cameras (ExoPilot 01M)
-  %(prog)s --batch --platform rk3588 \\
+  %(prog)s --batch --platform <board> \\
            --road /dev/video0 --wide_road /dev/video1 \\
            --stereo_left /dev/video22 --stereo_right /dev/video31
 
@@ -516,7 +517,8 @@ Examples:
                        help='Camera to calibrate')
 
     # Batch mode options
-    parser.add_argument('--platform', type=str, default='rk3588', choices=['rk3588'])
+    parser.add_argument('--platform', type=str, default=SUPPORTED_SOCS[0],
+                        choices=list(SUPPORTED_SOCS))
     parser.add_argument('--road', type=str, help='Road camera source')
     parser.add_argument('--wide_road', type=str, help='Wide road camera source')
     parser.add_argument('--stereo_left', type=str, help='Stereo left source')

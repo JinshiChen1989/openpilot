@@ -50,6 +50,7 @@ from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.common.core_config import set_daemon_affinity
 from openpilot.common.transformations.orientation import rot_from_euler, euler_from_rot
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware import HARDWARE
 
 from openpilot.selfdrive.gridd.camera_geometry import CameraArrayGeometry
 from openpilot.selfdrive.locationd.side_camera_calibrator import SideCameraCalibrator
@@ -155,8 +156,13 @@ class MultiCameraCalibrator:
         cloudlog.info(f"Cameras: {list(self.cameras.keys())}")
 
     def _detect_platform(self) -> str:
-        """Detect hardware platform."""
-        return 'rk3588'
+        """The board this is running on.
+
+        Returned a literal before, so a calibration produced on any other
+        board was tagged as this one -- and the tag is what decides which
+        geometry the calibration is read back against.
+        """
+        return HARDWARE.get_device_type()
 
     def _init_cameras(self):
         """Initialize calibration states for all cameras."""

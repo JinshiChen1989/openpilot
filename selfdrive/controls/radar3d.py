@@ -103,7 +103,7 @@ class Radar3DD:
             cloudlog.error(
                 "radar3d: hal package not installed -- cannot drive the sensor. " +
                 "Dev PC: pip3 install -e ../exopilot/hal. On-device: rerun " +
-                "exopilot/scripts/install/setup_rk3588.sh."
+                f"exopilot/scripts/install/setup_{HARDWARE.get_device_type()}.sh."
             )
             return
 

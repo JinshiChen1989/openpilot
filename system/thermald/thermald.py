@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+from pathlib import Path
 from enum import Enum
 from dataclasses import dataclass
 
@@ -45,6 +46,22 @@ _hal_thermal = HARDWARE.hal_module("thermal")
 _NPU_GOV_PATHS = getattr(_hal_thermal, "NPU_DEVFREQ_GOVERNOR_PATHS", [])
 _GPU_GOV_PATHS = getattr(_hal_thermal, "GPU_DEVFREQ_GOVERNOR_PATHS", [])
 _THERMAL_DEFAULTS = getattr(_hal_thermal, "THERMAL_PROTECTION_DEFAULTS", {})
+
+
+
+def _discover_devfreq_governors(kind: str) -> list[str]:
+  """Governor nodes for a devfreq device kind, found by sysfs name.
+
+  `kind` is the node-name suffix -- "npu" matches ffa30000.npu on RK3588 and
+  whatever address the same block has on another board. Returns [] off-device,
+  where /sys/class/devfreq does not exist; callers already treat an empty
+  candidate list as "no frequency control available".
+  """
+  try:
+    return sorted(str(p) for p in
+                  Path("/sys/class/devfreq").glob(f"*.{kind}/governor"))
+  except OSError:
+    return []
 
 
 class ProtectionStatus(Enum):
@@ -77,13 +94,13 @@ def _discover_devfreq_governor(candidates: list[str]) -> str | None:
 class ThermalProtection:
     """Active thermal protection with frequency management."""
 
-    _NPU_GOV_CANDIDATES = _NPU_GOV_PATHS or [
-        "/sys/class/devfreq/ffa30000.npu/governor",  # RK3588
-    ]
-    _GPU_GOV_CANDIDATES = _GPU_GOV_PATHS or [
-        "/sys/class/devfreq/fb000000.gpu/governor",  # RK3588
-        "/sys/class/devfreq/ff9a0000.gpu/governor",  # RK3588 alt
-    ]
+    # hal gives the board's exact nodes; without it, discover them. The old
+    # fallback was a list of RK3588 device-tree addresses, which on any other
+    # board name paths that do not exist -- so throttling silently controlled
+    # nothing. The sysfs node *suffix* (.npu/.gpu) is stable across Rockchip
+    # SoCs even though the address in front of it is not.
+    _NPU_GOV_CANDIDATES = _NPU_GOV_PATHS or _discover_devfreq_governors("npu")
+    _GPU_GOV_CANDIDATES = _GPU_GOV_PATHS or _discover_devfreq_governors("gpu")
 
     def __init__(self, config: ThermalProtectionConfig | None = None):
         self.config = config or ThermalProtectionConfig()

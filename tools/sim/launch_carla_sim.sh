@@ -15,7 +15,8 @@ set -euo pipefail
 
 SCENARIO="${1:-}"
 WEATHER="${2:-clear_day}"
-PLATFORM="${3:-rk3588}"
+# Empty = let the bridge detect the board (see carla_world.py).
+PLATFORM="${3:-}"
 
 CARLA_DIR="${CARLA_DIR:-/opt/CARLA_0.9.16}"
 CARLA_HOST="${CARLA_HOST:-localhost}"

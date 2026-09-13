@@ -224,14 +224,16 @@ class CameraArrayGeometry:
     if EXO01_CAMERAS:
         del _name
 
-    def __init__(self, platform: str = 'rk3588', config_path: str | None = None):
+    def __init__(self, platform: str | None = None, config_path: str | None = None):
         """Initialize camera array geometry.
 
         Args:
-            platform: 'rk3588' (ExoPilot 01M)
+            platform: board tag, e.g. 'rk3588' (ExoPilot 01M). Defaults to
+                the board that is running -- it used to default to a literal,
+                which silently described the wrong optics on any other board.
             config_path: Optional path to calibration YAML file
         """
-        self.platform = platform.lower()
+        self.platform = (platform or HARDWARE.get_device_type()).lower()
         self.cameras: dict[str, CameraConfig] = {}
         self.reference_camera = 'road'
 
@@ -543,8 +545,11 @@ class CameraArrayGeometry:
 # ========== Convenience Functions ==========
 
 def create_geometry_for_hardware() -> CameraArrayGeometry:
-    """Create camera geometry based on detected hardware."""
-    return CameraArrayGeometry.for_platform('rk3588')
+    """Camera geometry for the board that is running.
+
+    Said "based on detected hardware" while naming one board outright.
+    """
+    return CameraArrayGeometry.for_platform(HARDWARE.get_device_type())
 
 
 def test_geometry():

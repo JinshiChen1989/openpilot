@@ -335,7 +335,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"EOPSideCamerasSwapped", {PERSISTENT, BOOL, "0"}},
     {"EOPSideEGPUMode", {PERSISTENT, STRING, "off"}},
     {"EOPSideSegEGPUMode", {PERSISTENT, STRING, "off"}},
-    {"EOPSimPlatform", {PERSISTENT, STRING, "rk3588"}},
+    // Empty means "the board that is running" -- the sim bridge falls back
+    // to HARDWARE.get_device_type(). A literal here was one board's name
+    // baked into a branch-independent default.
+    {"EOPSimPlatform", {PERSISTENT, STRING, ""}},
     {"EOPSimScenario", {PERSISTENT, STRING, ""}},
     {"EOPSimWeather", {PERSISTENT, STRING, ""}},
     {"EOPSpeedLimitOffset", {PERSISTENT, INT, "0"}},

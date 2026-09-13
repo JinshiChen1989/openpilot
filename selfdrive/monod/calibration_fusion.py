@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from openpilot.selfdrive.gridd.camera_geometry import CameraArrayGeometry
 from openpilot.system.hardware.camera_geometry import CameraGeometry, CameraPosition
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware import HARDWARE
 
 @dataclass
 class CalibrationState:
@@ -101,7 +102,7 @@ class CameraCalibrationManager:
             return hardware.get_camera_geometry()
         except Exception as e:
             cloudlog.warning(f"Failed to load geometry from HAL: {e}, using ExoPilot 01M default")
-            return CameraArrayGeometry.for_platform("rk3588")
+            return CameraArrayGeometry.for_platform(HARDWARE.get_device_type())
 
     def _init_calibrations(self):
         """Initialize calibrations from HAL geometric layout."""

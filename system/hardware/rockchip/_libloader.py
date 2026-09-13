@@ -39,6 +39,36 @@ _SYSTEM_PATHS = [
 _PREFER_PROJECT = os.environ.get("RK_LIBLOADER_PREFER_PROJECT", "0") == "1"
 
 
+
+# rknpu2 names its runtime directories by SoC family, which is not always the
+# SoC name: RK3566/RK3568 share "RK356X", while RK3588 and RK3576 each have
+# their own. Mapped explicitly rather than derived, because the naming has no
+# rule to derive from.
+_RKNPU2_FAMILY = {
+  "rk3588": "RK3588",
+  "rk3576": "RK3576",
+  "rk3566": "RK356X",
+  "rk3568": "RK356X",
+}
+_RKNPU2_ALL = ("RK3588", "RK3576", "RK356X")
+
+
+def _rknpu2_families() -> list[str]:
+  """rknpu2 runtime directories to search, running board's first.
+
+  Importing the hardware layer here would be circular -- this module is what
+  that layer loads its backends through -- so the board is read from the
+  device tree directly.
+  """
+  try:
+    compat = Path("/proc/device-tree/compatible").read_bytes().decode(
+      "utf-8", errors="ignore").lower()
+  except OSError:
+    compat = ""
+  first = next((fam for soc, fam in _RKNPU2_FAMILY.items() if soc in compat), None)
+  return [first, *(f for f in _RKNPU2_ALL if f != first)] if first else list(_RKNPU2_ALL)
+
+
 def _detect_deb_package(lib_file: str) -> bool:
   """Check if a library was installed via a vendor .deb package."""
   try:
@@ -80,16 +110,21 @@ def _submodule_paths(name: str) -> list[Path]:
     if name in ("od_share", "md_share", "RKAP_3A"):
       paths.append(algo_dir)
 
-  # rknpu2 prebuilt runtime libraries (RK3588)
+  # rknpu2 prebuilt runtime libraries. Upstream ships one directory per SoC
+  # family; the running board's goes first so it wins, with the others kept
+  # as fallbacks. Listing a fixed pair (RK3588, RK356X) meant a board in
+  # neither family -- RK3576 is its own directory -- found no librknn_api at
+  # all and fell back to no NPU.
   if name == "rknnrt":
     rknpu2 = _THIRD_PARTY / "rknpu2"
     if rknpu2.exists():
-      paths.append(rknpu2 / "runtime" / "RK3588" / "Linux" / "librknn_api" / "aarch64")
-      paths.append(rknpu2 / "runtime" / "RK356X" / "Linux" / "librknn_api" / "aarch64")
-      paths.append(rknpu2 / "runtime" / "RK3588" / "Linux" / "rknn_server" / "aarch64" / "usr" / "bin")
-      paths.append(rknpu2 / "runtime" / "RK356X" / "Linux" / "rknn_server" / "aarch64" / "usr" / "bin")
-      paths.append(rknpu2 / "examples" / "3rdparty" / "rga" / "RK3588" / "lib" / "Linux" / "aarch64")
-      paths.append(rknpu2 / "examples" / "3rdparty" / "rga" / "RK356X" / "lib" / "Linux" / "aarch64")
+      families = _rknpu2_families()
+      for fam in families:
+        paths.append(rknpu2 / "runtime" / fam / "Linux" / "librknn_api" / "aarch64")
+      for fam in families:
+        paths.append(rknpu2 / "runtime" / fam / "Linux" / "rknn_server" / "aarch64" / "usr" / "bin")
+      for fam in families:
+        paths.append(rknpu2 / "examples" / "3rdparty" / "rga" / fam / "lib" / "Linux" / "aarch64")
       paths.append(rknpu2 / "examples" / "3rdparty" / "mpp" / "Linux" / "aarch64")
 
   # Self-built from source submodules

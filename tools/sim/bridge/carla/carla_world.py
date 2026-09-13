@@ -6,6 +6,7 @@ from openpilot.system.socketd.vehicle.tesla.values import VEHICLE
 from openpilot.tools.sim.lib.common import SimulatorState, vec3
 from openpilot.tools.sim.lib.camera_sim import W, H, STEREO_W, STEREO_H
 from openpilot.tools.sim.bridge.common import World
+from openpilot.system.hardware import HARDWARE
 
 
 class CarlaWorld(World):
@@ -67,7 +68,7 @@ class CarlaWorld(World):
 
     # Read params
     self.params = Params()
-    sim_platform = self.params.get("EOPSimPlatform") or "rk3588"
+    sim_platform = self.params.get("EOPSimPlatform") or HARDWARE.get_device_type()
 
     # Hardware geometry (ExoPilot 01M / RK3588)
     self.stereo_baseline = 0.08  # 80mm

@@ -48,6 +48,7 @@ import time
 
 from openpilot.selfdrive.gridd.camera_geometry import CameraArrayGeometry
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware import HARDWARE
 
 class CameraRole(Enum):
     """Camera roles in the array."""
@@ -117,8 +118,10 @@ class FusionConfig:
     enable_range_weights: bool = True
     road_weight_near: float = 0.8   # Road camera weight at close range
 
-    # Platform-specific
-    platform: str = "rk3588"
+    # Platform-specific. None means "the board that is running" -- resolved
+    # in MultiCameraFusion, not here, so the dataclass stays importable
+    # without touching hardware.
+    platform: str | None = None
 
 
 class MultiCameraFusion:
@@ -154,13 +157,13 @@ class MultiCameraFusion:
         """Initialize multi-camera fusion.
 
         Args:
-            config: Fusion configuration. If None, uses RK3588 defaults.
+            config: Fusion configuration. If None, defaults are used and the board is detected.
         """
         if config is None:
-            config = FusionConfig(platform='rk3588')
+            config = FusionConfig()
 
         self.config = config
-        self.platform = config.platform
+        self.platform = config.platform or HARDWARE.get_device_type()
 
         # Camera geometry
         self.geometry = CameraArrayGeometry.for_platform(self.platform)
@@ -186,10 +189,29 @@ class MultiCameraFusion:
         cloudlog.info(f"MultiCameraFusion initialized for {self.platform}")
         cloudlog.info(f"Supported cameras: {self._get_supported_cameras()}")
 
+    def _camera_specs(self) -> dict:
+        """Optics for the running board.
+
+        A board with no entry used to fall through to RK3588's silently, so
+        fusion ran with another board's focal lengths and fields of view --
+        wrong numbers, no indication anything was off. It still falls back,
+        because refusing to fuse is worse than fusing imprecisely, but it
+        says so now.
+        """
+        specs = self.CAMERA_SPECS.get(self.platform)
+        if specs is None:
+            fallback = next(iter(self.CAMERA_SPECS))
+            cloudlog.error(
+                "MultiCameraFusion: no camera optics described for '%s'; "
+                "using '%s' as a stand-in. Ranges and fields of view will be "
+                "wrong until this board's specs are added.",
+                self.platform, fallback)
+            specs = self.CAMERA_SPECS[fallback]
+        return specs
+
     def _get_supported_cameras(self) -> list[CameraRole]:
         """Get list of cameras supported by current platform."""
-        specs = self.CAMERA_SPECS.get(self.platform, self.CAMERA_SPECS['rk3588'])
-        return list(specs.keys())
+        return list(self._camera_specs().keys())
 
     def _init_range_weights(self):
         """Initialize range-aware weight maps."""
@@ -428,7 +450,7 @@ def test_multi_camera_fusion():
 
     # Test ExoPilot 01M (RK3588)
     print("\n--- ExoPilot 01M (RK3588) 4-Camera ---")
-    fusion1 = MultiCameraFusion(FusionConfig(platform='rk3588'))
+    fusion1 = MultiCameraFusion(FusionConfig())
 
     # Add dummy frames
     for cam in ['road', 'wide_road', 'stereo_left', 'stereo_right']:
