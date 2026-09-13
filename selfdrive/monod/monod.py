@@ -181,7 +181,11 @@ class RKNNMonoProcessor:
                 core_id = self._npu_config.core_count - 1
             self.core_id = core_id
         else:
-            self.core_id = 2 if self._npu_config.is_rk3588 else 1
+            # Last core by default. On 01M (3 cores) that was core 2, hard-coded
+            # via is_rk3588; deriving it from core_count keeps the same result
+            # there and gives 02M's 2-core NPU core 1 rather than an index that
+            # does not exist on it.
+            self.core_id = max(0, self._npu_config.core_count - 1)
 
         self._npu_cores = str(self.core_id)
         self._init_npu()

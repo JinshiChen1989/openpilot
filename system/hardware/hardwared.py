@@ -59,15 +59,15 @@ class PowerRail:
 
 
 class HardwareD:
-    """Hardware management daemon for RK3588 platforms.
+    """Hardware management daemon for RK3576 platforms.
 
-    REGULATORS below and the devfreq governor paths in _init_hardware() are
-    RK3588-specific (RK806S PMIC rail names, RK3588's `ffa30000.npu` devfreq
-    device-tree address), which is all this branch supports. They fail closed
-    rather than crash on anything else — _set_governor no-ops if the sysfs
-    path doesn't exist, and REGULATORS just tracks whatever names are listed
-    — so a board without this data loses under-voltage detection and
-    governor forcing instead of failing to boot.
+    REGULATORS below and the devfreq governor paths in _init_hardware() carry
+    RK3588's PMIC rail names and devfreq device-tree address; real RK3576
+    PMIC/devfreq data has not been confirmed against hardware yet. Both fail
+    closed rather than crash -- _set_governor no-ops if the sysfs path does
+    not exist, and REGULATORS just tracks whatever names are listed -- so
+    under-voltage detection and governor forcing are no-ops until that data
+    lands, rather than a boot failure.
     """
 
     # RK806S regulator definitions for RK3588

@@ -62,7 +62,7 @@ assert arch in ["aarch64", "x86_64", "Darwin"]
 # The board(s) this branch supports. One entry per branch: EOP10 and 01M are
 # RK3588, 02M is RK3576. The lookup below is board-generic so only this list
 # changes between branches.
-ROCKCHIP_SOCS = ['rk3588']
+ROCKCHIP_SOCS = ['rk3576']
 soc = None
 if arch == "aarch64":
   try:

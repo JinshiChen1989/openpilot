@@ -7,14 +7,12 @@ Guidance for Claude Code when working on this openpilot fork.
 **ExoPilot (EOP)** — Advanced ADAS for Rockchip RK3588.
 
 - **Codebase**: OpenPilot fork + EOP-specific daemons, controllers, UI
-- **Platform**: **RK3588 only** (ExoPilot 01L / 01M). 02M/RK3576 lives on
-  `dev/02M` — see **Branch model** below. As of 2026-09-13 this branch carries
-  no RK3576 support at all: `system/hardware/rk3576/`, `PlatformType.RK3576`,
-  `Hardware::RK3576()`, the RK3576 camera/NPU entries and the 02M UI
-  (wide-screen telemetry panel, `EOPTelemetryPanelWidth`, the split
-  `MainWindow`) are gone, and `deviceScreenSize()` is a constant 1024x600.
-  Asking for `rk3576` now fails loudly rather than falling back. ExoRobot 01H
-  (RK3588 16GB, HumRobot) is in `~/robot/exorobot`
+- **Platform**: **RK3576 only** (ExoPilot 02M). 01M/RK3588 lives on `dev/01M`
+  and `dev/EOP10` — see **Branch model** below. As of 2026-09-13 this branch
+  carries no RK3588 support at all: `system/hardware/rk3588/`,
+  `PlatformType.RK3588`, `Hardware::RK3588()` and the RK3588 camera/NPU
+  entries are gone. Asking for `rk3588` fails loudly rather than falling
+  back. ExoRobot 01H (RK3588 16GB, HumRobot) is in `~/robot/exorobot`
 - **Suffix = RAM**: L=4GB / M=8GB / H=16GB; PCIe accel (camera-tier Hailo-8/DX-M1 only) is a runtime-detected plug-in, works unchanged on either SoC
 - **Status**: In development — dev PC testing phase (not hardware-deployed)
 
@@ -22,9 +20,9 @@ Guidance for Claude Code when working on this openpilot fork.
 
 ExoPilot BSP must be installed first before openpilot:
 ```bash
-sudo ~/pilot/exopilot/scripts/install/setup_rk3588.sh && sudo reboot   # ExoPilot 01L/01M
+sudo ~/pilot/exopilot/scripts/install/setup_rk3576.sh && sudo reboot   # ExoPilot 02M
 ```
-The 02M equivalent (`setup_rk3576.sh`) belongs with `dev/02M`.
+The 01M equivalent (`setup_rk3588.sh`) belongs with `dev/01M`.
 
 ---
 
@@ -74,9 +72,9 @@ The 02M equivalent (`setup_rk3576.sh`) belongs with `dev/02M`.
 
 ## Branch model
 
-This is the **foundation** branch. It keeps the old C++/Qt UI and supports
-**ExoPilot 01M (RK3588) hardware only**. The two UI branches sit on top of it
-and take foundation improvements by **rebasing**, not by cherry-picking:
+`dev/EOP10` is the **foundation**: it keeps the old C++/Qt UI and supports
+**ExoPilot 01M (RK3588) hardware only**. This branch and `dev/01M` sit on top
+of it and take foundation improvements by **rebasing**, not cherry-picking:
 
 ```
 dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 / 1024x600
@@ -125,8 +123,10 @@ dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 /
 - **A fix that is not about the UI belongs here**, so both branches inherit
   it. Daemons, cereal, params_keys.h, systemd units, SConstruct outside the
   Qt block. Fixing it on 01M or 02M instead leaves the other branch broken.
-- **UI fixes belong on the branch they apply to.** The C++ UI is this
-  branch's; `selfdrive/ui/eop/` is theirs.
+- **UI fixes belong on the branch they apply to.** `selfdrive/ui/eop/` is
+  this branch's and 01M's; the C++ UI is EOP10's. Within `eop/`, `views/` is
+  the intended divergence between 01M and 02M — everything else there is kept
+  byte-identical so a fix cherry-picks between them unchanged.
 
 ### Rebasing the UI branches onto an improved EOP10
 
