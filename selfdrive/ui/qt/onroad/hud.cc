@@ -271,8 +271,8 @@ void HudRenderer::drawBlindSpotOverlay(QPainter &p, const QRect &surface_rect) {
 void HudRenderer::drawSpeedLimit(QPainter &p, const QRect &surface_rect) {
   // MUTCD-style speed limit sign: white circle, red border, black number.
   // Positioned to the right of the set-speed box, vertically centred with it.
-  // Works on both 7" (1024×600) and 9.3" (1600×600) displays — coordinates are
-  // relative to the left edge of the camera widget, not the full screen width.
+  // Coordinates are relative to the left edge of the camera widget, not the
+  // full screen width. The only supported panel is 1024×600 (qt_window.h).
 
   const int radius = 28;
   const int cx = 193;   // right of set-speed box (~x=35+110+20+28)
