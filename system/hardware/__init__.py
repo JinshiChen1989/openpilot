@@ -15,6 +15,7 @@ from openpilot.system.hardware.base import HardwareBase, HardwareCapability
 from openpilot.system.hardware.registry import PlatformRegistry
 
 # Platform exports
+from openpilot.system.hardware.rockchip_base import RockchipHardware
 from openpilot.system.hardware.rk3588.hardware import RK3588Hardware
 from openpilot.system.hardware.rk3576.hardware import RK3576Hardware
 
@@ -27,11 +28,13 @@ RK3588_DETECTED = RK3588
 RK3576 = HARDWARE.get_device_type() == 'rk3576'
 RK3576_DETECTED = RK3576
 
-# Combined Rockchip platform flag. RK3576Hardware subclasses RK3588Hardware
-# (same Rockchip/Linux userspace family), so isinstance() covers both today
-# and any future Rockchip platform subclass automatically, unlike an
-# enumerated `RK3588 or RK3576` check that silently misses new platforms.
-ROCKCHIP = isinstance(HARDWARE, RK3588Hardware)
+# Combined Rockchip platform flag. Asks the shared base, not RK3588Hardware:
+# RK3576Hardware used to subclass RK3588Hardware, so "is this a Rockchip
+# board" was answered by "is this an 01M" -- true only by accident of the
+# class hierarchy, and false the moment the two became siblings. Testing the
+# base also picks up any future Rockchip board for free, which an enumerated
+# `RK3588 or RK3576` check would silently miss.
+ROCKCHIP = isinstance(HARDWARE, RockchipHardware)
 
 # Legacy compatibility alias (TICI = any Rockchip platform)
 TICI = ROCKCHIP

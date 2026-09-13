@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""RK3588 Hardware Implementation (ExoPilot 01M)."""
+"""RK3588 Hardware Implementation (ExoPilot 01M).
+
+Board-specific only. Everything RK3588 shares with the other Rockchip board
+-- reboot/shutdown, serial and dongle identity, the network and power stubs,
+the USB camera probe, the RGA/MPP/RKNN handles -- lives in RockchipHardware,
+which RK3576Hardware inherits as a sibling rather than through this class.
+"""
 
 from __future__ import annotations
 
 import os
-import subprocess
 
-from openpilot.system.hardware.base import HardwareBase, HardwareCapability
-from openpilot.system.hardware.rk_device_id import get_emmc_cid, get_rk_otp_chip_id
+from openpilot.system.hardware.base import HardwareCapability
 from openpilot.system.hardware.rk3588 import camera_config
-
-# Rockchip hardware backends (RGA/MPP/RKNN ctypes bindings)
-from openpilot.system.hardware.rockchip import RockchipBackendFactory
+from openpilot.system.hardware.rockchip_base import RockchipHardware
 
 
-class RK3588Hardware(HardwareBase):
+class RK3588Hardware(RockchipHardware):
     """RK3588 platform hardware (ExoPilot 01M).
 
     Board bring-up data (GPIO/UART/I2C/cellular pin assignments, USB topology)
@@ -50,46 +52,14 @@ class RK3588Hardware(HardwareBase):
     except ImportError:
         _cam_geo = None
 
-    # Platform identity + camera-array shape, factored out of
-    # get_camera_array_config()/get_stereo_baseline_mm() below so a subclass
-    # (e.g. RK3576Hardware) only needs to override these class attributes and
-    # `_cam_geo`/`_usb_cameras` above, not reimplement the two methods.
+    # Platform identity and camera-array shape. RockchipHardware's
+    # get_camera_array_config()/get_stereo_baseline_mm() are written against
+    # these attributes, so this class supplies data rather than behaviour.
     PLATFORM_NAME = "ExoPilot 01M"
     SOC_NAME = "RK3588"
     MIPI_CAMERA_NAMES = ("road", "wide_road", "stereo_left", "stereo_right")
     HAS_TELE_ROAD = False
     _usb_cameras = camera_config.USB_CAMERAS
-
-    @staticmethod
-    def get_cellular_interface() -> str:
-        """Return active cellular modem interface for EC25.
-
-        EC25 on ExoPilot 01M is wired through a USB-to-Mini-PCIe mux and runs
-        in QMI mode, so the kernel exposes cdc-wdm + wwan0. The legacy ECM/RNDIS
-        usb0 interface is only used when the modem is forced into that mode.
-        """
-        if os.path.exists("/sys/class/net/wwan0"):
-            return "wwan0"
-        if os.path.exists("/sys/class/net/usb0"):
-            return "usb0"
-        return "wwan0"  # Default for ExoPilot 01M QMI mode
-
-    @staticmethod
-    def get_modem_type() -> str:
-        """Auto-detect Quectel EC25 USB modem."""
-        import subprocess
-        try:
-            result = subprocess.run(
-                ["lsusb"], capture_output=True, text=True, timeout=5
-            )
-            output = result.stdout.lower()
-            if "2c7c:" in output:  # Quectel vendor ID
-                if any(pid in output for pid in ["0125", "0121"]):
-                    return "quectel_ec25"
-                return "quectel_usb"
-        except Exception:
-            pass
-        return "unknown"
 
     @staticmethod
     def modem_power_on() -> bool:
@@ -98,7 +68,6 @@ class RK3588Hardware(HardwareBase):
         Disables PCIe (HIGH) to enable USB signals, then pulses reset.
         Returns True if GPIO control was attempted.
         """
-        import os
         import time
         try:
             gpio_dis = RK3588Hardware.GPIO["MINIPCIE_DIS"]["num"]
@@ -135,7 +104,6 @@ class RK3588Hardware(HardwareBase):
     @staticmethod
     def modem_power_off() -> bool:
         """Disable EC25 Mini-PCIe slot (RK3588)."""
-        import os
         try:
             gpio_dis = RK3588Hardware.GPIO["MINIPCIE_DIS"]["num"]
             if os.path.exists(f"/sys/class/gpio/gpio{gpio_dis}"):
@@ -145,12 +113,6 @@ class RK3588Hardware(HardwareBase):
         except Exception:
             pass
         return False
-
-    class Paths:
-        """System paths for RK3588."""
-        SHM_PATH = "/dev/shm"
-        DATA_PATH = "/data/media/0"
-        PARAMS_PATH = "/data/params"
 
     @staticmethod
     def detect() -> bool:
@@ -166,135 +128,6 @@ class RK3588Hardware(HardwareBase):
 
     def get_platform(self) -> str:
         return "ExoPilot 01M"
-
-    def reboot(self, reason=None):
-        subprocess.run(["reboot"], check=False)
-
-    def uninstall(self):
-        pass
-
-    def get_os_version(self):
-        return "ubuntu"
-
-    def get_imei(self, slot) -> str:
-        return ""
-
-    def get_serial(self):
-        """Return Rockchip OTP chip ID (SoC-bound factory serial)."""
-        rk_otp = get_rk_otp_chip_id()
-        if rk_otp:
-            return rk_otp
-        # Fallback to device-tree serial (legacy, easily spoofed on clones)
-        try:
-            with open('/proc/device-tree/serial-number') as f:
-                return f.read().strip('\x00')
-        except OSError:
-            return "unknown"
-
-    def get_dongle_id(self):
-        """Return eMMC CID as dongle ID (persistent across reflashes)."""
-        emmc_cid = get_emmc_cid()
-        if emmc_cid:
-            return emmc_cid
-        # Fallback to device-tree serial
-        try:
-            with open('/proc/device-tree/serial-number') as f:
-                return f.read().strip('\x00')
-        except OSError:
-            return "unknown"
-
-    def get_network_info(self):
-        return {}
-
-    def get_network_type(self):
-        return "wifi"
-
-    def get_sim_info(self):
-        return {}
-
-    def get_sim_lpa(self):
-        raise NotImplementedError
-
-    def get_network_strength(self, network_type):
-        return 0
-
-    def get_current_power_draw(self):
-        return 0
-
-    def get_som_power_draw(self):
-        return 0
-
-    def shutdown(self):
-        subprocess.run(["poweroff"], check=False)
-
-    def set_screen_brightness(self, percentage):
-        pass
-
-    def get_screen_brightness(self):
-        return 100
-
-    def set_power_save(self, powersave_enabled):
-        pass
-
-    def get_gpu_usage_percent(self):
-        return 0
-
-    def get_modem_temperatures(self):
-        return []
-
-    def initialize_hardware(self):
-        pass
-
-    def get_networks(self):
-        return []
-
-    def get_camera_array_config(self) -> dict:
-        """MIPI cameras (per-platform, `MIPI_CAMERA_NAMES`) + up to 3 USB
-        cameras via hub. Shared by every Rockchip platform subclass — only
-        `_cam_geo`, `_usb_cameras`, `MIPI_CAMERA_NAMES`, `PLATFORM_NAME`,
-        `SOC_NAME`, and `HAS_TELE_ROAD` differ per platform.
-
-        Mounting positions/lens data come from hal.platform.<soc>_camera_geometry
-        (the same source selfdrive/gridd/camera_geometry.py uses) so this stays
-        consistent with the actual calibration/perception geometry rather than
-        carrying its own separate copy.
-
-        USB hub cameras (side/rear) are enabled on hardware revisions with
-        the USB 3.0 hub populated.
-        """
-        cam_geo = self._cam_geo
-        if cam_geo is not None:
-            mipi_cams = [
-                {
-                    "name": name,
-                    "sensor": cam_geo.SENSOR_TYPE[name].upper(),
-                    "lens_mm": cam_geo.LENS_MM[name],
-                    "y_offset_mm": cam_geo.POSITIONS_M[name][1] * 1000.0,
-                    "fov_deg": cam_geo.FOV_DEG[name],
-                }
-                for name in self.MIPI_CAMERA_NAMES
-            ]
-            stereo_baseline_mm = cam_geo.STEREO_BASELINE_M * 1000.0
-        else:
-            mipi_cams = []
-            stereo_baseline_mm = 0.0
-        usb_cams = [
-            {"name": c.name, "sensor": c.sensor.value, "lens_mm": 0.0,
-             "y_offset_mm": c.y_offset_mm, "fov_deg": c.fov_deg}
-            for c in self._usb_cameras
-        ]
-        return {
-            "platform": self.PLATFORM_NAME,
-            "soc": self.SOC_NAME,
-            "num_cameras": len(mipi_cams) + len(usb_cams),
-            "stereo_baseline_mm": stereo_baseline_mm,
-            "has_tele_road": self.HAS_TELE_ROAD,
-            "cameras": mipi_cams + usb_cams,
-        }
-
-    def get_stereo_baseline_mm(self) -> float:
-        cam_geo = self._cam_geo
-        return cam_geo.STEREO_BASELINE_M * 1000.0 if cam_geo is not None else 0.0
 
     def get_capabilities(self) -> set:
         return {
@@ -316,58 +149,6 @@ class RK3588Hardware(HardwareBase):
         """ExoPilot 01M has no on-board mic — voice input not supported."""
         return False
 
-    @staticmethod
-    def _detect_uvc_device(device_path: str) -> bool:
-        """Check if a V4L2 UVC device is present and responds to queries."""
-        import os
-        import subprocess
-        if not os.path.exists(device_path):
-            return False
-        try:
-            result = subprocess.run(
-                ["v4l2-ctl", "-d", device_path, "--all"],
-                capture_output=True, text=True, timeout=5
-            )
-            return result.returncode == 0 and "error" not in result.stderr.lower()
-        except Exception:
-            return False
-
-    @staticmethod
-    def _detect_usb_hub() -> bool:
-        """Detect RTS5411S USB 3.0 hub used for side cameras on ExoPilot 01M."""
-        import subprocess
-        try:
-            result = subprocess.run(
-                ["lsusb"], capture_output=True, text=True, timeout=5
-            )
-            output = result.stdout.lower()
-            # RTS5411S hub vendor:product == 0bda:5411 (Realtek)
-            return "0bda:5411" in output or "rts5411" in output
-        except Exception:
-            return False
-
-    def has_side_cameras(self) -> bool:
-        """Detect side cameras at runtime (UVC via RTS5411S USB hub).
-
-        Returns:
-            True if side_left or side_right UVC camera is detected.
-        """
-        left = self._detect_uvc_device("/dev/video-side-left")
-        right = self._detect_uvc_device("/dev/video-side-right")
-        hub = self._detect_usb_hub()
-        return left or right or hub
-
-    def has_rear_camera(self) -> bool:
-        """Detect rear camera at runtime (UVC via shared HOST0 port).
-
-        Original driver face camera is repurposed as rear UVC camera (170°).
-        driverd runs in steering-torque-only mode (no face detection).
-
-        Returns:
-            True if rear UVC camera is detected.
-        """
-        return self._detect_uvc_device("/dev/video-rear")
-
     def get_max_reliable_depth_m(self) -> float:
         """RK3588 stereo baseline + ISP limits reliable depth to ~80m."""
         return 80.0
@@ -375,19 +156,3 @@ class RK3588Hardware(HardwareBase):
     def get_camera_config(self, name: str) -> camera_config.CameraConfig | None:
         """Return camera configuration by name."""
         return camera_config.get_camera(name)
-
-    def get_rga(self):
-        """Return RGA 2D accelerator instance, or None if librga.so unavailable."""
-        return RockchipBackendFactory.create("rga")
-
-    def get_mpp(self):
-        """Return MPP decoder handle, or None if librockchip_mpp.so unavailable."""
-        return RockchipBackendFactory.create("mpp")
-
-    def get_rknn(self):
-        """Return RKNN NPU runtime, or None if librknnrt.so unavailable."""
-        return RockchipBackendFactory.create("rknn")
-
-    def npu_available(self) -> bool:
-        """Quick check if RK3588 NPU runtime is present."""
-        return RockchipBackendFactory.create("rknn") is not None

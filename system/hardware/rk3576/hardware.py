@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """RK3576 Hardware Implementation (ExoPilot 02M).
 
-Thin subclass of RK3588Hardware: RK3576 is the same Rockchip/Linux userspace
-family (reboot/shutdown/network/power methods are all generic subprocess
-calls, unchanged), so only what's actually different between the two boards
-is overridden here — board identity, pin/camera-geometry data sources, the
-5-camera MIPI array (vs. 01M's 4, no telephoto), and cellular modem power
-control (02M wires EC25 as direct GPIO bit-bang, not through a Mini-PCIe
-USB-mode mux like 01M).
+A sibling of RK3588Hardware, not a subclass of it. Both inherit the shared
+Rockchip/Linux half from RockchipHardware; what differs between the boards is
+here -- board identity, pin and camera-geometry data sources, the 5-camera
+MIPI array (against 01M's 4, and this one has a telephoto), and cellular
+modem power control (02M wires the EC25 as a direct GPIO bit-bang rather than
+through 01M's Mini-PCIe USB-mode mux).
+
+This used to subclass RK3588Hardware. That made 01M's class load-bearing for
+02M, so neither board's support could be removed from a branch without
+breaking the other's.
 """
 
 from __future__ import annotations
 
 import os
 
-from openpilot.system.hardware.rk3588.hardware import RK3588Hardware
 from openpilot.system.hardware.base import HardwareCapability
 from openpilot.system.hardware.rk3576 import camera_config
+from openpilot.system.hardware.rockchip_base import RockchipHardware
 
 
-class RK3576Hardware(RK3588Hardware):
+class RK3576Hardware(RockchipHardware):
     """RK3576 platform hardware (ExoPilot 02M).
 
     Board bring-up data (GPIO/UART/I2C/cellular pin assignments) ships from
@@ -68,21 +71,6 @@ class RK3576Hardware(RK3588Hardware):
 
     def get_platform(self) -> str:
         return "ExoPilot 02M"
-
-    @staticmethod
-    def get_cellular_interface() -> str:
-        """Return active cellular modem interface for EC25.
-
-        Same EC25 chip and interface naming as ExoPilot 01M
-        (wwan0/cdc-wdm in QMI mode, usb0 ECM/RNDIS fallback) — only the
-        power-control circuit differs (see modem_power_on/off below), which
-        doesn't affect interface detection.
-        """
-        if os.path.exists("/sys/class/net/wwan0"):
-            return "wwan0"
-        if os.path.exists("/sys/class/net/usb0"):
-            return "usb0"
-        return "wwan0"  # Default for ExoPilot 02M QMI mode
 
     @staticmethod
     def modem_power_on() -> bool:
@@ -164,20 +152,12 @@ class RK3576Hardware(RK3588Hardware):
         ["features"]["mic"] = True), unlike 01M."""
         return True
 
-    def has_side_cameras(self) -> bool:
-        """Detect side cameras at runtime (UVC via RTS5411S USB hub).
-
-        Same RTS5411S hub as RK3588Hardware, confirmed by
-        exopilot/scripts/install/setup_rk3576.sh's USB topology comment and
-        DT overlay (`exopilot02m-usbhub-rts5411.dtbo`) -- side_left/
-        side_right are hub ports 1/2. `boards.py`'s `BOARD_DATA` doesn't
-        name the hub chip, but this install script does.
-        """
-        left = self._detect_uvc_device("/dev/video-side-left")
-        right = self._detect_uvc_device("/dev/video-side-right")
-        hub = self._detect_usb_hub()
-        return left or right or hub
-
+    # has_side_cameras()/has_rear_camera() come from RockchipHardware
+    # unchanged. 02M uses the same RTS5411S hub and the same device paths --
+    # confirmed by exopilot/scripts/install/setup_rk3576.sh's USB topology
+    # comment and its DT overlay (`exopilot02m-usbhub-rts5411.dtbo`), where
+    # side_left/side_right are hub ports 1 and 2. `boards.py`'s BOARD_DATA
+    # does not name the hub chip; that install script does.
     def get_max_reliable_depth_m(self) -> float:
         """RK3576's wider 160mm stereo baseline (vs. 01M's 80mm) roughly
         doubles reliable depth range — not yet measured on real hardware,
