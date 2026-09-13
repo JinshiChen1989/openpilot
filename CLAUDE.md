@@ -104,7 +104,7 @@ dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 /
   written to pick up "any future Rockchip board for free" — adding a board is
   a deliberate act.
 
-- **Three lists name the board a branch builds for.** A rebase from EOP10
+- **Four lists name the board a branch builds for.** A rebase from EOP10
   brings EOP10's values with it, so re-point them on every rebase:
 
   | file | list | EOP10 / 01M | 02M |
@@ -112,6 +112,7 @@ dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 /
   | `SConstruct` | `ROCKCHIP_SOCS` | `rk3588` | `rk3576` |
   | `system/hardware/rk_device_id.py` | `SUPPORTED_SOCS` | `rk3588` | `rk3576` |
   | `tools/convert_models_to_rknn.py` | `RKNN_TARGETS` | `rk3588` | `rk3576` |
+  | `Jenkinsfile` | `EOP_BOARD` | `rk3588` | `rk3576` |
 
   Everything else derives from the board that is running, and **no daemon may
   spell a board name**. Board data comes from

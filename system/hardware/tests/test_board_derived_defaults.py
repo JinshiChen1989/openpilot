@@ -171,3 +171,10 @@ def test_this_branch_carries_exactly_one_board():
                     (REPO / "SConstruct").read_text())
   assert socs and socs[0].count(",") == 0, f"SConstruct: {socs}"
   assert SUPPORTED_SOCS[0] in socs[0], f"SConstruct {socs[0]} vs {SUPPORTED_SOCS}"
+
+  # Jenkins picks the physical device to run the on-device stage against.
+  # Drift here is the worst of the four: it runs this branch's code on the
+  # other branch's hardware, silently and successfully enough to look fine.
+  board = re.findall(r'EOP_BOARD = "([^"]*)"', (REPO / "Jenkinsfile").read_text())
+  assert board == [SUPPORTED_SOCS[0]], \
+    f"Jenkinsfile EOP_BOARD {board} vs {SUPPORTED_SOCS}"
