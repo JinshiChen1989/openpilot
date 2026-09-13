@@ -17,21 +17,26 @@ from pathlib import Path
 import numpy as np
 
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.modeld.runners.rknn_platform import rknn_soc_tag
 from openpilot.system.inferenced.client import InferenceClient
 from openpilot.system.inferenced.compute import ModelConfig
 
 ROAD_CLASS_IDS = {0, 1}  # Cityscapes class 0=road, 1=sidewalk
 
-_MODEL_SEARCH = [
-    Path("/data/models/pp_liteseg_320_rk3588.rknn"),
-    Path("/data/models/pp_liteseg_rk3588.rknn"),
-    Path(__file__).parents[2] / "modeld/models/pp_liteseg_320_rk3588.rknn",
-    Path(__file__).parents[2] / "modeld/models/pp_liteseg_rk3588.rknn",
-]
+def _model_search() -> list[Path]:
+    """Candidate PPLiteSeg artifacts for the running board.
+
+    The SoC tag comes from the board, not from a name spelled here: an RKNN
+    binary built for the other SoC must never be picked up.
+    """
+    soc = rknn_soc_tag()
+    names = [f"pp_liteseg_320_{soc}.rknn", f"pp_liteseg_{soc}.rknn"]
+    roots = [Path("/data/models"), Path(__file__).parents[2] / "modeld/models"]
+    return [root / name for root in roots for name in names]
 
 
 def _find_model() -> Path | None:
-    for p in _MODEL_SEARCH:
+    for p in _model_search():
         if p.exists():
             return p
     return None

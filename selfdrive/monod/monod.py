@@ -26,7 +26,7 @@ import cereal.messaging as messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.core_config import set_daemon_affinity
-from openpilot.selfdrive.modeld.runners.rknn_platform import get_platform_npu_config
+from openpilot.selfdrive.modeld.runners.rknn_platform import get_platform_npu_config, rknn_soc_tag
 from openpilot.system.inferenced.client import InferenceClient
 from openpilot.system.inferenced.compute import (
     BackendType, ModelConfig
@@ -152,9 +152,9 @@ class RKNNMonoProcessor:
             _REPO_ROOT / 'models/rknn/yolo_640.rknn',
         ] if p.exists()), '/data/openpilot/models/rknn/yolo_640.rknn'),
         'sceneseg_road': next((str(p) for p in [
-            Path('/data/openpilot/models/rknn/sceneseg_lite_rk3588.rknn'),
+            Path(f'/data/openpilot/models/rknn/sceneseg_lite_{rknn_soc_tag()}.rknn'),
             _REPO_ROOT / 'models/onnx/sceneseg_lite.onnx',
-        ] if p.exists()), '/data/openpilot/models/rknn/sceneseg_lite_rk3588.rknn'),
+        ] if p.exists()), f'/data/openpilot/models/rknn/sceneseg_lite_{rknn_soc_tag()}.rknn'),
         'ppliteseg_wide': next((str(p) for p in [
             Path('/data/openpilot/models/rknn/ppliteseg_320.rknn'),
             _REPO_ROOT / 'models/onnx/ppliteseg_320.onnx',

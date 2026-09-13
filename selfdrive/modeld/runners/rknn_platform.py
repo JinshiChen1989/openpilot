@@ -74,6 +74,20 @@ def detect_platform() -> PlatformType:
     return PlatformType.UNKNOWN
 
 
+def rknn_soc_tag() -> str:
+    """The SoC tag that appears in RKNN artifact filenames.
+
+    An RKNN binary is compiled for one SoC and must never be loaded on
+    another (CLAUDE.md, "Never reuse an RKNN binary across target SoCs"), so
+    model search paths are built from the running board's tag. A board with
+    no matching artifact then finds nothing -- which is the correct outcome,
+    and far better than silently loading the other board's binary.
+
+    Returns "unknown" off-device, where there is no NPU to load into anyway.
+    """
+    return detect_platform().value
+
+
 def get_core_count(platform: PlatformType) -> int:
     """Get NPU core count for platform."""
     core_counts = {

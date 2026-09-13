@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from openpilot.selfdrive.modeld.vision.yolo_rknn import YoloRKNNDetector
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.modeld.runners.rknn_platform import rknn_soc_tag
 
 
 @dataclass
@@ -78,7 +79,7 @@ class YoloObjectDetector:
         Initialize YOLOv8-nano detector for Core 2.
 
         Args:
-            model_path: Path to yolov8n_320_rk3588.rknn (auto-detected if None)
+            model_path: Path to the board's yolov8n_320_<soc>.rknn (auto-detected if None)
             input_size: Model input size (320×320 for Core 2 efficiency)
             obj_threshold: Detection confidence threshold
             nms_threshold: NMS IoU threshold
@@ -102,10 +103,13 @@ class YoloObjectDetector:
 
     def _find_model(self) -> Path:
         """Find YOLO model in standard locations."""
+        # SoC tag from the running board -- an RKNN built for the other SoC
+        # must never be loaded (CLAUDE.md).
+        name = f"yolov8n_320_{rknn_soc_tag()}.rknn"
         search_paths = [
-            Path(__file__).parent.parent / "modeld" / "models" / "yolov8n_320_rk3588.rknn",
-            Path(__file__).parent / "models" / "yolov8n_320_rk3588.rknn",
-            Path("/data/models/yolov8n_320_rk3588.rknn"),
+            Path(__file__).parent.parent / "modeld" / "models" / name,
+            Path(__file__).parent / "models" / name,
+            Path("/data/models") / name,
         ]
         for path in search_paths:
             if path.exists():

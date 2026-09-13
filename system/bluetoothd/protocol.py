@@ -56,6 +56,7 @@ import json
 import struct
 from dataclasses import dataclass
 from enum import IntEnum
+from openpilot.system.hardware import HARDWARE
 
 PROTOCOL_VERSION = "4.1.0"
 
@@ -285,7 +286,7 @@ def get_device_info(phase: str = "phase_1", supports_mode22: bool = True,
         'phase': phase,
         'deviceType': 'openpilot',
         'platform': 'openpilot',
-        'hardware': 'rk3588',
+        'hardware': HARDWARE.get_device_type(),
         'requiresPairing': requires_pairing,
         'isPaired': is_paired,
 

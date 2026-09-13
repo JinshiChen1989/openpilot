@@ -19,11 +19,16 @@ import argparse
 import sys
 from pathlib import Path
 
+
+# SoCs this branch can build RKNN artifacts for. One entry per branch, matching
+# ROCKCHIP_SOCS in SConstruct -- see the branch model in CLAUDE.md.
+RKNN_TARGETS = ("rk3588",)
+
 # Add openpilot to path
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 
-def convert_driving_vision(input_path: Path, output_path: Path, target_platform: str = "rk3588"):
+def convert_driving_vision(input_path: Path, output_path: Path, target_platform: str = RKNN_TARGETS[0]):
     """Convert driving vision model to RKNN format."""
     try:
         from rknn.api import RKNN
@@ -83,7 +88,7 @@ def convert_driving_vision(input_path: Path, output_path: Path, target_platform:
     return True
 
 
-def convert_driving_policy(input_path: Path, output_path: Path, target_platform: str = "rk3588"):
+def convert_driving_policy(input_path: Path, output_path: Path, target_platform: str = RKNN_TARGETS[0]):
     """Convert driving policy model to RKNN format."""
     try:
         from rknn.api import RKNN
@@ -140,8 +145,11 @@ def convert_driving_policy(input_path: Path, output_path: Path, target_platform:
 
 def main():
     parser = argparse.ArgumentParser(description="Convert OpenPilot models to RKNN format")
-    parser.add_argument("--target", default="rk3588", choices=["rk3588"],
-                       help="Target platform (default: rk3588)")
+    # An RKNN binary is valid for exactly one SoC, so the converter must be
+    # able to produce the board this branch targets -- a single-choice flag
+    # meant the other board's artifacts could not be built at all.
+    parser.add_argument("--target", default=RKNN_TARGETS[0], choices=RKNN_TARGETS,
+                       help=f"Target platform (default: {RKNN_TARGETS[0]})")
     parser.add_argument("--output-dir", default="/data/models",
                        help="Output directory for RKNN models")
     parser.add_argument("--test", action="store_true",

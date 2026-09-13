@@ -28,6 +28,11 @@ import json
 import sys
 
 
+# Rockchip SoCs this branch supports, as they appear in the device tree.
+# One entry per branch -- see the branch model in CLAUDE.md.
+SUPPORTED_SOCS = ("rk3588",)
+
+
 def _read_text(path: str) -> str | None:
     try:
         with open(path, "r") as f:
@@ -227,11 +232,11 @@ def compute_device_fingerprint(
     emmc_psn = parse_emmc_psn(emmc_cid) if emmc_cid else None
     rk_otp = get_rk_otp_chip_id() if "rk_otp" in sources else None
 
-    # Determine platform
-    platform = "unknown"
-    compat = _read_text("/proc/device-tree/compatible") or ""
-    if "rk3588" in compat.lower():
-        platform = "rk3588"
+    # Determine platform. Matching a single board's name left every other
+    # board tagged "unknown", which then propagates into the device identity
+    # this module exists to produce.
+    compat = (_read_text("/proc/device-tree/compatible") or "").lower()
+    platform = next((soc for soc in SUPPORTED_SOCS if soc in compat), "unknown")
 
     # Pick primary ID with anti-clone hierarchy
     primary_id: str | None = None
