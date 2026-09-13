@@ -29,6 +29,18 @@ from openpilot.common.params import Params
 _params = Params()
 
 from openpilot.system.v4l2d.occlusion_detector import OcclusionDetector, OcclusionROI
+from openpilot.system.hardware.rk_device_id import SUPPORTED_SOCS
+
+
+# Device types this daemon's hardcoded camera array is valid for: the board
+# this branch carries, plus None/'pc' for dev and CI. A whitelist, not a
+# blacklist, so a board added later has to opt in deliberately -- and named
+# once here rather than inline, so the tests assert against the same tuple
+# the guard uses instead of re-spelling board names that then go stale on
+# the other branch.
+SUPPORTED_DEVICE_TYPES = (None, 'pc', SUPPORTED_SOCS[0])
+
+
 
 # MIPI CSI device-path candidates live in the closed HAL package, per board.
 _HAL_MIPI_PATHS = getattr(
@@ -658,20 +670,17 @@ def main() -> int:
     cloudlog.warning("v4l2d: could not detect hardware: %s", e)
     device_type = None
 
-  # This daemon's camera list (_default_camera_configs) hardcodes ExoPilot
-  # 01M's 4-camera MIPI array and device-path candidates
-  # (hal.platform.rk3588_camera_paths), which is the only hardware this
-  # branch supports. On any other board, silently proceeding would open
-  # whatever /dev/videoN nodes happen to exist and mislabel them as
-  # road/wide_road/stereo_left/stereo_right, publishing wrong camera
-  # identities on the VisionIPC bus rather than failing visibly. Refuse to
-  # guess. The check stays a whitelist rather than a blacklist so a board
-  # added later has to opt in deliberately.
-  if device_type not in (None, 'pc', 'rk3588'):
+  # This daemon's camera list (_default_camera_configs) hardcodes one board's
+  # MIPI array and device-path candidates. On any other board, silently
+  # proceeding would open whatever /dev/videoN nodes happen to exist and
+  # mislabel them as road/wide_road/stereo_left/stereo_right, publishing
+  # wrong camera identities on the VisionIPC bus rather than failing
+  # visibly. Refuse to guess.
+  if device_type not in SUPPORTED_DEVICE_TYPES:
     cloudlog.error(
       "v4l2d: platform '%s' is not supported by this daemon's hardcoded "
-      + "ExoPilot 01M camera array -- refusing to start rather than open the "
-      + "wrong devices.", device_type)
+      + "camera array (supported: %s) -- refusing to start rather than open "
+      + "the wrong devices.", device_type, SUPPORTED_DEVICE_TYPES)
     return 1
 
   try:

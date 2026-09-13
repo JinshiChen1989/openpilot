@@ -1,14 +1,17 @@
 """Regression test for v4l2d.py's platform guard, added 2026-08-26.
 
-v4l2d hardcodes ExoPilot 01M's 4-camera MIPI array and device-path
-candidates (hal.platform.rk3588_camera_paths). Before this guard, running
-it on any other platform (notably RK3576/ExoPilot 02M, which has no
-equivalent hal.platform.rk3576_camera_paths module) would silently open
-whatever /dev/videoN nodes happened to exist and mislabel them as
+v4l2d hardcodes one board's MIPI array and device-path candidates. Before
+this guard, running it on any other board would silently open whatever
+/dev/videoN nodes happened to exist and mislabel them as
 road/wide_road/stereo_left/stereo_right -- publishing wrong camera
 identities on the VisionIPC bus rather than failing visibly. main() must
-refuse to start (return 1) instead of reaching V4L2D().run() on an
-unsupported platform.
+refuse to start (return 1) instead of reaching V4L2D().run().
+
+These tests derive the allowed set from v4l2d.SUPPORTED_DEVICE_TYPES rather
+than spelling board names. Spelling them meant this file asserted 01M's
+answers verbatim on 02M -- "rk3588 is allowed, rk3576 is rejected" -- which
+is the exact inverse of what that branch does, and it went unnoticed because
+test.sh did not run this suite.
 """
 import sys
 from unittest.mock import MagicMock  # noqa: TID251
@@ -55,24 +58,30 @@ def _patch_hardware(monkeypatch):
   return _apply
 
 
-def test_rk3576_is_rejected_without_touching_v4l2d(_patch_hardware, monkeypatch):
-  _patch_hardware('rk3576')
+OTHER_BOARDS = ('rk3588', 'rk3576', 'some_future_soc')
+
+
+@pytest.mark.parametrize("device_type", [
+  d for d in OTHER_BOARDS if d not in v4l2d_module.SUPPORTED_DEVICE_TYPES
+])
+def test_a_board_this_branch_does_not_carry_is_rejected(
+    device_type, _patch_hardware, monkeypatch):
+  """Including the *other* real board, which is the case that matters: its
+  camera array is a different shape, so opening this branch's device paths
+  on it mislabels real cameras rather than simply finding none."""
+  _patch_hardware(device_type)
   called = []
   monkeypatch.setattr(v4l2d_module, 'V4L2D', lambda: called.append(True) or MagicMock())
   assert main() == 1
   assert called == [], "V4L2D() must not be constructed for an unsupported platform"
 
 
-def test_unknown_platform_is_rejected(_patch_hardware, monkeypatch):
-  _patch_hardware('some_future_soc')
-  called = []
-  monkeypatch.setattr(v4l2d_module, 'V4L2D', lambda: called.append(True) or MagicMock())
-  assert main() == 1
-  assert called == []
-
-
-def test_rk3588_is_allowed_through_to_v4l2d(_patch_hardware, monkeypatch):
-  _patch_hardware('rk3588')
+@pytest.mark.parametrize("device_type", v4l2d_module.SUPPORTED_DEVICE_TYPES)
+def test_every_supported_device_type_is_allowed_through(
+    device_type, _patch_hardware, monkeypatch):
+  """The branch's own board, plus None/'pc' -- the dev and CI fallback, which
+  must keep working exactly as it did before the guard was added."""
+  _patch_hardware(device_type)
   fake_instance = MagicMock()
   fake_instance.run.return_value = 0
   monkeypatch.setattr(v4l2d_module, 'V4L2D', lambda: fake_instance)
@@ -80,12 +89,8 @@ def test_rk3588_is_allowed_through_to_v4l2d(_patch_hardware, monkeypatch):
   fake_instance.run.assert_called_once()
 
 
-def test_pc_is_allowed_through_to_v4l2d(_patch_hardware, monkeypatch):
-  """pc is the dev/CI fallback -- must keep working exactly as before this
-  guard was added (some_future_soc/rk3576 are the only new rejections)."""
-  _patch_hardware('pc')
-  fake_instance = MagicMock()
-  fake_instance.run.return_value = 0
-  monkeypatch.setattr(v4l2d_module, 'V4L2D', lambda: fake_instance)
-  assert main() == 0
-  fake_instance.run.assert_called_once()
+def test_the_guard_admits_exactly_one_board():
+  """Two boards in the allowed set would mean one of them gets the other's
+  device paths -- the failure the guard exists to prevent."""
+  boards = [d for d in v4l2d_module.SUPPORTED_DEVICE_TYPES if d not in (None, 'pc')]
+  assert len(boards) == 1, boards
