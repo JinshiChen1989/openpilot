@@ -27,15 +27,19 @@ HARDWARE = cast(HardwareBase, PlatformRegistry.create())
 RK3588 = HARDWARE.get_device_type() == 'rk3588'
 RK3588_DETECTED = RK3588
 
-# Combined Rockchip platform flag. Asks the shared base, not RK3588Hardware:
-# RK3576Hardware used to subclass RK3588Hardware, so "is this a Rockchip
-# board" was answered by "is this an 01M" -- true only by accident of the
-# class hierarchy, and false the moment the two became siblings. Testing the
-# base also picks up any future Rockchip board for free, which an enumerated
-# `RK3588 or RK3576` check would silently miss.
+# "Is this an ExoPilot board?" Asks the shared base, not RK3588Hardware:
+# RK3576Hardware used to subclass RK3588Hardware, so this was answered by
+# "is this an 01M" -- true only by accident of the class hierarchy, and
+# false the moment the two became siblings.
+#
+# Named ROCKCHIP because both boards are Rockchip parts, but the set is not
+# "any Rockchip SoC": it is exactly the boards ExoPilot ships, one per
+# branch (01M/RK3588 here, 02M/RK3576 on dev/02M). 03M/RK3688 is not
+# supported yet and is DoraPilot's, not this tree's -- adding a board here
+# is a deliberate act, not something that should happen for free.
 ROCKCHIP = isinstance(HARDWARE, RockchipHardware)
 
-# Legacy compatibility alias (TICI = any Rockchip platform)
+# Legacy compatibility alias (TICI = running on an ExoPilot board)
 TICI = ROCKCHIP
 
 # Platform detection helper

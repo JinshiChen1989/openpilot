@@ -2,7 +2,7 @@
 """
 RK3588 Device ID Extraction Utility
 =====================================
-Extracts unique hardware identifiers from Rockchip boards for device
+Extracts unique hardware identifiers from ExoPilot boards for device
 authentication and NavPilot official-hardware verification.
 
 Sources (in order of reliability):

@@ -19,6 +19,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from openpilot.system.hardware.rk_device_id import SUPPORTED_SOCS
 
 LOG = logging.getLogger(__name__)
 
@@ -41,16 +42,17 @@ _PREFER_PROJECT = os.environ.get("RK_LIBLOADER_PREFER_PROJECT", "0") == "1"
 
 
 # rknpu2 names its runtime directories by SoC family, which is not always the
-# SoC name: RK3566/RK3568 share "RK356X", while RK3588 and RK3576 each have
-# their own. Mapped explicitly rather than derived, because the naming has no
-# rule to derive from.
+# SoC name -- mapped explicitly, because the naming has no rule to derive
+# from. Only the SoCs ExoPilot actually ships are listed: 01M is RK3588 and
+# 02M is RK3576. Rockchip's other parts (RK356X and friends) are not ExoPilot
+# hardware and have no business in this search path; 03M/RK3688 is not
+# supported yet and belongs to dorapilot, not this tree.
 _RKNPU2_FAMILY = {
   "rk3588": "RK3588",
   "rk3576": "RK3576",
-  "rk3566": "RK356X",
-  "rk3568": "RK356X",
 }
-_RKNPU2_ALL = ("RK3588", "RK3576", "RK356X")
+_RKNPU2_ALL = tuple(_RKNPU2_FAMILY[soc] for soc in SUPPORTED_SOCS
+                    if soc in _RKNPU2_FAMILY)
 
 
 def _rknpu2_families() -> list[str]:
@@ -66,7 +68,9 @@ def _rknpu2_families() -> list[str]:
   except OSError:
     compat = ""
   first = next((fam for soc, fam in _RKNPU2_FAMILY.items() if soc in compat), None)
-  return [first, *(f for f in _RKNPU2_ALL if f != first)] if first else list(_RKNPU2_ALL)
+  if first is None:
+    return list(_RKNPU2_ALL)
+  return [first, *(f for f in _RKNPU2_ALL if f != first)]
 
 
 def _detect_deb_package(lib_file: str) -> bool:

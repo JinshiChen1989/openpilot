@@ -33,10 +33,10 @@ public:
   static bool RK3588() { return matchesPlatform("rk3588"); }
 
   // Generic Rockchip detection. This branch supports 01M hardware only, so
-  // RK3588 is the only Rockchip board -- RK3576 (ExoPilot 02M) lives on
+  // RK3588 is the only board this branch carries -- RK3576 (ExoPilot 02M) lives on
   // dev/02M, see the branch model in CLAUDE.md. Kept as a separate predicate
   // rather than folded into RK3588() because callers asking "is this a
-  // Rockchip board" should not have to be edited when a board is added.
+  // ExoPilot board" should not have to be edited when a board is added.
   static bool ROCKCHIP() {
     return RK3588();
   }

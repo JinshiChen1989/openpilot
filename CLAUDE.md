@@ -84,10 +84,26 @@ dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 /
 ```
 
 - **Each branch carries one board.** EOP10 and 01M are RK3588-only; 02M is
-  RK3576-only. `system/hardware/rockchip_base.py` holds what any Rockchip
-  board shares, and each board class is a sibling on top of it —
+  RK3576-only. `system/hardware/rockchip_base.py` holds what the two boards
+  share, and each board class is a sibling on top of it —
   `RK3576Hardware` used to subclass `RK3588Hardware`, which made 01M's class
   load-bearing for 02M and the two inseparable. Do not reintroduce that.
+- **The supported hardware is ExoPilot's, not "Rockchip".** The authoritative
+  list is `exo-elec/exopilot`'s `hal/hal/platform/boards.py` (`BOARD_DATA`)
+  and `bsp.py`:
+
+  | board | SoC | device-tree compatible | consumer |
+  |-------|-----|------------------------|----------|
+  | ExoPilot 01M | RK3588 | `exopilot,exp01`, `rockchip,rk3588` | this branch + `dev/01M` |
+  | ExoPilot 02M | RK3576 | `rpdzkj,rp-rk3576`, `rockchip,rk3576` | `dev/02M`, VisionPilot |
+  | ExoPilot 03M | RK3688 | — | **not supported yet**; DoraPilot's, not this tree's |
+
+  Only those two boards. Rockchip's other parts (RK356X and the rest) are not
+  ExoPilot hardware and must not appear in search paths or board maps, and
+  RK3688 stays out until it is actually supported. Nothing here should be
+  written to pick up "any future Rockchip board for free" — adding a board is
+  a deliberate act.
+
 - **Three lists name the board a branch builds for.** A rebase from EOP10
   brings EOP10's values with it, so re-point them on every rebase:
 

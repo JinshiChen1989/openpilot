@@ -38,7 +38,7 @@ USB_HUB_ID = "0bda:5411"
 
 
 class RockchipHardware(HardwareBase):
-    """What every Rockchip board in this tree has in common.
+    """What the ExoPilot boards have in common.
 
     Board bring-up data (GPIO/UART/I2C/cellular pin assignments, USB
     topology) ships from the closed exopilot hal package rather than living

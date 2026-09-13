@@ -146,3 +146,30 @@ def test_fusion_says_so_when_it_has_no_optics_for_the_board(caplog):
   specs = fusion._camera_specs()
   assert specs, "still returns usable specs"
   assert FusionConfig().platform is None, "config defaults to the running board"
+
+
+def test_only_exopilot_socs_are_in_the_rknpu2_search_path():
+  """RK356X and friends are Rockchip parts but not ExoPilot hardware, and
+  RK3688 (03M) is not supported yet. A stray entry here is a directory the
+  loader will happily search and, if a stale library is present, load."""
+  from openpilot.system.hardware.rockchip._libloader import _RKNPU2_FAMILY
+  from openpilot.system.hardware.rk_device_id import SUPPORTED_SOCS
+  assert set(_RKNPU2_FAMILY) == {"rk3588", "rk3576"}, _RKNPU2_FAMILY
+  assert "rk3688" not in _RKNPU2_FAMILY, "03M is DoraPilot's, not this tree's"
+  assert set(SUPPORTED_SOCS) <= set(_RKNPU2_FAMILY), \
+    "this branch's board must have an rknpu2 runtime directory"
+
+
+def test_this_branch_carries_exactly_one_board():
+  """Each branch is one board. Two entries anywhere in the per-branch lists
+  means something inherited the other branch's value in a rebase."""
+  from openpilot.system.hardware.rk_device_id import SUPPORTED_SOCS
+  from openpilot.tools.convert_models_to_rknn import RKNN_TARGETS
+  assert len(SUPPORTED_SOCS) == 1, SUPPORTED_SOCS
+  assert len(RKNN_TARGETS) == 1, RKNN_TARGETS
+  assert SUPPORTED_SOCS[0] == RKNN_TARGETS[0], \
+    "the board built for and the board detected must be the same one"
+  socs = re.findall(r"ROCKCHIP_SOCS = \[([^\]]*)\]",
+                    (REPO / "SConstruct").read_text())
+  assert socs and socs[0].count(",") == 0, f"SConstruct: {socs}"
+  assert SUPPORTED_SOCS[0] in socs[0], f"SConstruct {socs[0]} vs {SUPPORTED_SOCS}"

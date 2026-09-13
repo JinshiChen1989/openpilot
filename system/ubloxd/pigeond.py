@@ -48,7 +48,7 @@ class PigeonD:
         self.running = False
 
     def run(self) -> None:
-        # Gate on "is this a Rockchip board", not on one board's name: the
+        # Gate on "is this an ExoPilot board", not on one board's name: the
         # GPS is the same u-blox part on every ExoPilot board, and naming a
         # board here made this daemon fail to import on a branch that does
         # not carry that board.
