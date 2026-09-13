@@ -1,12 +1,27 @@
-# The C++/Qt UI is gone on dev/02M -- this branch's UI is selfdrive/ui/eop,
-# a Qt Widgets UI in Python (plan sections 4.1-4.2). Nothing here builds a
-# `ui` binary any more, so qt_env, the widget/util libraries, the .ts ->
-# .qm lrelease step and the assets.qrc -> assets.cc resource compile are all
-# unused; the Python UI reads assets from disk.
+# The C++/Qt UI is gone on both UI branches -- the UI is selfdrive/ui itself,
+# a Qt Widgets UI in Python. Nothing here builds a
+# `ui` binary any more, so qt_env, the widget/util libraries and the
+# assets.qrc -> assets.cc resource compile are all unused; the Python UI
+# reads assets from disk. The .ts -> .qm lrelease step below is still needed:
+# QTranslator loads the compiled .qm at startup (see main.load_translation).
 #
 # The installers survive: they are separate raylib programs that have nothing
 # to do with the driving UI.
 Import('env', 'arch', 'common')
+
+# Compile translations. The Python UI reads .qm files from disk rather than
+# from a Qt resource, so this is just lrelease over the .ts sources -- no
+# qt_env, no rcc, no moc. lrelease ships in qttools5-dev-tools.
+import json
+with open(File("translations/languages.json").abspath) as f:
+  languages = json.load(f)
+
+ts_files = [f"#selfdrive/ui/translations/{stem}.ts" for stem in languages.values()]
+qm_files = [src.replace(".ts", ".qm") for src in ts_files]
+translations = env.Command(qm_files, ts_files, "lrelease -silent $SOURCES")
+env.NoClean(ts_files)
+env.Precious(ts_files)
+env.Alias('translations', translations)
 
 if GetOption('extras') and arch != "Darwin":
   raylib_env = env.Clone()

@@ -123,10 +123,16 @@ dev/EOP10 ──┬── dev/01M   PyQt5 UI, classic openpilot layout, RK3588 /
 - **A fix that is not about the UI belongs here**, so both branches inherit
   it. Daemons, cereal, params_keys.h, systemd units, SConstruct outside the
   Qt block. Fixing it on 01M or 02M instead leaves the other branch broken.
-- **UI fixes belong on the branch they apply to.** `selfdrive/ui/eop/` is
-  this branch's and 01M's; the C++ UI is EOP10's. Within `eop/`, `views/` is
-  the intended divergence between 01M and 02M — everything else there is kept
-  byte-identical so a fix cherry-picks between them unchanged.
+- **UI fixes belong on the branch they apply to.** `selfdrive/ui/` is
+  this branch's and 01M's; the C++ UI is EOP10's. `views/` and `main.py` are
+  the intended divergence between 01M and 02M; every other file that exists
+  on both (`qt.py`, `state.py`, `components/`, `settings/`, `styles/`,
+  `views/panels/`) is kept **byte-identical**, so a fix cherry-picks between
+  them unchanged. Check that before editing one of those files. Four
+  `components/` files exist only here — `chrome.py`, `panels.py`,
+  `panel_widgets.py`, `factory.py` — because they *are* the 02M design (the
+  50px chrome bands and the swipeable side panels); 01M's classic layout has
+  no counterpart to port them to.
 
 ### Rebasing the UI branches onto an improved EOP10
 
@@ -154,75 +160,39 @@ After rebasing, re-run `./test.sh` on each branch.
 | `elm327d` | `adaptd` | Renamed 2026-05-30 — never implemented ELM327; is a driving policy daemon |
 | `radar3d.py` (camera+radar fusion) | `radard.py` | Renamed 2026-08-16 — matches upstream openpilot's name. `radar3d.py` is now the long-range UART radar *producer* daemon, not the fusion daemon; see New Features below |
 
-## Branch model
-
-`dev/EOP10` is the **foundation**. `dev/01M` and `dev/02M` are UI branches on
-top of it, and they take foundation improvements by **rebasing**, not by
-cherry-picking:
-
-```
-dev/EOP10 ──┬── dev/01M   classic openpilot UI, PyQt5, 1024x600 (RK3588)
-            └── dev/02M   nagasware-style UI, PyQt5, 1600x600 (RK3576)
-```
-
-- **`dev/EOP10` keeps the old C++/Qt UI.** That is deliberate: it is the
-  reference the Python UIs were ported from, and removing it there would
-  strand the comparison.
-- **A fix that is not about the UI belongs on `dev/EOP10`**, so both branches
-  inherit it. Daemons, cereal, params_keys.h, systemd units, SConstruct
-  outside the Qt block. If you fix it on 01M or 02M instead, the other branch
-  keeps the bug.
-- **A fix that is about the UI belongs on the branch it applies to.** Inside
-  `selfdrive/ui/eop/`, `views/` is the intended divergence; everything else
-  there (`qt.py`, `state.py`, `components/`, `views/panels/`) is kept
-  **byte-identical** across 01M and 02M so it cherry-picks between them
-  unchanged. Check that before editing one of those files.
-
-### Rebasing onto an improved EOP10
-
-```bash
-git fetch origin dev/EOP10
-git checkout dev/01M && git rebase origin/dev/EOP10
-git checkout dev/02M && git rebase origin/dev/EOP10
-```
-
-Both branches then need a force-with-lease push, since a rebase rewrites the
-commits.
-
-**Expect modify/delete conflicts.** The UI branches delete the whole C++ UI
-tree, and 02M additionally deletes `tools/systemd/openpilot-rk3588.service`.
-Any EOP10 commit touching a deleted file conflicts on every rebase. The
-resolution is almost always "the UI branch's deletion wins" — `git rm` the
-file and continue — but read the incoming change first: if it is a *backend*
-fix that happens to live in a file the UI branch deleted, it needs porting to
-the Python equivalent rather than dropping.
-
-After rebasing, re-run `./test.sh` on each branch and confirm the shared UI
-files are still identical between them.
-
 ## UI
 
-The C++/Qt UI is gone. `selfdrive/ui/eop/` is a Qt Widgets UI written in
+The C++/Qt UI is gone. `selfdrive/ui/` is a Qt Widgets UI written in
 Python and run as a `PythonProcess`, and `dev/01M` uses the same module.
 
 - **This branch carries the new design**: top-tab settings, swipeable side
   panels, 1600x600 chrome. `dev/01M` keeps the classic openpilot layout.
-- **The split between the branches is only `views/`.** `qt.py`, `state.py`,
-  `components/` and `views/panels/` are byte-identical on `dev/01M` and
-  `dev/02M`, so a fix to any of them cherry-picks between branches unchanged.
-  Check that before editing one of those files.
+- **The split between the branches is `views/` and `main.py`.** Everything
+  else that exists on both — `qt.py`, `state.py`, `components/`, `settings/`,
+  `styles/`, `views/panels/` — is byte-identical, so a fix to any of them
+  cherry-picks between branches unchanged. Check that before editing one.
+  `components/chrome.py`, `panels.py`, `panel_widgets.py` and `factory.py`
+  are 02M-only: they implement the chrome bands and swipeable side panels
+  that are this branch's design, so 01M has nothing to keep in sync.
 - **Binding**: **PyQt5 only**. There is no PySide fallback — carrying one
   meant checking every spelling against two bindings, and it leaked anyway
   (scoped vs unscoped QDBus enums, QSpinBox float coercion). Import Qt names
-  from `selfdrive/ui/eop/qt.py` rather than from `PyQt5` directly: it is the
+  from `selfdrive/ui/qt.py` rather than from `PyQt5` directly: it is the
   one place a future Qt move gets edited. Write `Signal`, not `pyqtSignal`.
   Note PyQt5 is GPLv3 or a paid Riverbank licence while openpilot is MIT, so
   the licence question has to be settled before anything is distributed —
   a recorded choice for a research project, not an oversight.
-- **Run it**: `PYTHONPATH=. python3 -m openpilot.selfdrive.ui.eop.main --demo`
+- **Run it**: `PYTHONPATH=. python3 -m openpilot.selfdrive.ui.main --demo`
 - **Test it**: `./test.sh` now includes the UI suite, or directly with
-  `QT_QPA_PLATFORM=offscreen python3 -m pytest selfdrive/ui/eop/tests
-  -c selfdrive/ui/eop/tests/pytest.ini --noconftest`
+  `QT_QPA_PLATFORM=offscreen python3 -m pytest selfdrive/ui/tests
+  -c selfdrive/ui/tests/pytest.ini --noconftest`
+- **Translations**: `main.load_translation()` installs a `QTranslator` for
+  `LanguageSetting` before the first widget is built — Qt resolves `tr()` when
+  a string is used, so a widget constructed earlier keeps its English text. It
+  reads `selfdrive/ui/translations/<stem>.qm`, compiled from the `.ts` sources
+  by the `lrelease` step in `selfdrive/ui/SConscript` (`scons translations`).
+  The C++ UI embedded those in a Qt resource; there is no resource system
+  here, so they are read from disk.
 - **Not yet verified on hardware**: the VisionIPC/EGL camera path and which Qt
   platform plugin the device runs. See `docs/eop10/EOP10_PORT_PLAN.md` P1.
 
@@ -368,8 +338,8 @@ See `docs/eop/CODE_QUALITY_LINT_CLEANUP.md` for the full report and recommended 
 
 ---
 
-**Last updated**: 2026-08-16  
-**Branch**: dev/01M (renamed from dev/EOP10, 2026-09-10)
+**Last updated**: 2026-09-13  
+**Branch**: dev/02M (RK3576 / ExoPilot 02M only)
 
 ---
 
